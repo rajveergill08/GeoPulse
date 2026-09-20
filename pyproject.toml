@@ -13,8 +13,16 @@ authors = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+spatial = [
+  "apache-sedona==1.9.0",
+  "pandas==2.3.3",
+  "pyspark==4.0.4",
+]
+
 [project.scripts]
 geopulse-generate = "geopulse.synthetic:main"
+geopulse-spatial-join = "geopulse.spatial:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

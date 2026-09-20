@@ -1,0 +1,5 @@
+store_id,store_name,status,latitude,longitude,catchment_radius_m
+store_a,Store A - MG Road,existing,12.9756,77.6066,500
+store_b,Store B - Brigade Road,proposed,12.9719,77.6070,500
+store_c,Store C - Indiranagar,candidate,12.9784,77.6408,500
+store_d,Store D - Koramangala,candidate,12.9352,77.6245,500

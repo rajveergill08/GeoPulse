@@ -7,12 +7,14 @@ a React/Kepler.gl decision dashboard.
 
 ## Current implementation
 
-The first implementation milestone provides:
+The current implementation provides:
 
 - A deterministic, streaming Python generator for anonymized mobile GPS pings.
 - Weekday commuter and weekend retail movement patterns around Bengaluru.
 - CSV and compressed CSV output suitable for large development datasets.
 - Snowflake DDL and loading SQL using native `GEOGRAPHY` points.
+- A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
+- A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -49,6 +51,25 @@ Run the validation suite:
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+## Run the spatial catchment join
+
+Install the optional Spark dependencies (Java 17 is also required):
+
+```powershell
+python -m pip install --editable ".[spatial]"
+
+geopulse-spatial-join `
+  --pings data/generated/mobile_pings.csv.gz `
+  --stores data/reference/stores.csv `
+  --output data/output/spatial `
+  --shuffle-partitions 8
+```
+
+The job creates 500-metre spheroidal catchments around the reference stores and keeps a match
+for every catchment intersected by a ping. Overlapping matches are retained for the later
+cannibalization model. See `docs/spatial-join.md` for data-quality rules, output contracts, and
+scaling notes.
 
 ## Load into Snowflake
 

@@ -11,6 +11,7 @@ venv/
 
 # Generated mobility data
 data/generated/
+data/output/
 *.csv.gz
 
 # Local configuration and credentials
