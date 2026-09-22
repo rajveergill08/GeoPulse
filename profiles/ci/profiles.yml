@@ -1,0 +1,8 @@
+geopulse:
+  target: ci
+  outputs:
+    ci:
+      type: duckdb
+      path: target/geopulse_ci.duckdb
+      schema: main
+      threads: 4

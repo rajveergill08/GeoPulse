@@ -49,3 +49,27 @@ jobs:
 
       - name: Run Apache Sedona integration tests
         run: python -m unittest discover -s tests -p "test_spatial.py" -v
+
+  test-dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dbt adapters
+        run: python -m pip install --editable ".[analytics]"
+
+      - name: Load synthetic spatial fixtures
+        run: dbt seed --profiles-dir profiles/ci --target ci --full-refresh
+
+      - name: Build and test hourly footfall models
+        run: dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
+
+      - name: Validate Snowflake project parsing
+        run: dbt parse --profiles-dir profiles/snowflake --target snowflake --no-partial-parse

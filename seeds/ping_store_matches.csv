@@ -1,0 +1,10 @@
+device_id,event_ts,event_date,event_hour_utc,ping_latitude,ping_longitude,accuracy_m,activity_type,store_id,store_name,store_status,catchment_radius_m,distance_to_store_m
+dev_a,2026-09-22 08:05:00,2026-09-22,8,12.9758,77.6066,8.0,morning_commute,store_a,Store A - MG Road,existing,500.0,22.2
+dev_a,2026-09-22 08:05:00,2026-09-22,8,12.9758,77.6066,8.0,morning_commute,store_a,Store A - MG Road,existing,500.0,24.0
+dev_a,2026-09-22 08:20:00,2026-09-22,8,12.9745,77.6070,9.0,morning_commute,store_a,Store A - MG Road,existing,500.0,130.0
+dev_b,2026-09-22 08:30:00,2026-09-22,8,12.9730,77.6068,12.0,morning_commute,store_a,Store A - MG Road,existing,500.0,290.0
+dev_a,2026-09-22 08:20:00,2026-09-22,8,12.9745,77.6070,9.0,morning_commute,store_b,Store B - Brigade Road,proposed,500.0,290.0
+dev_b,2026-09-22 08:30:00,2026-09-22,8,12.9730,77.6068,12.0,morning_commute,store_b,Store B - Brigade Road,proposed,500.0,125.0
+dev_a,2026-09-22 18:05:00,2026-09-22,18,12.9757,77.6065,7.0,evening_commute,store_a,Store A - MG Road,existing,500.0,16.0
+dev_c,2026-09-22 18:15:00,2026-09-22,18,12.9760,77.6070,11.0,evening_commute,store_a,Store A - MG Road,existing,500.0,62.0
+dev_d,2026-09-22 18:45:00,2026-09-22,18,12.9740,77.6060,15.0,evening_commute,store_a,Store A - MG Road,existing,500.0,190.0

@@ -19,6 +19,11 @@ spatial = [
   "pandas==2.3.3",
   "pyspark==4.0.4",
 ]
+analytics = [
+  "dbt-core==1.12.5",
+  "dbt-duckdb==1.11.0",
+  "dbt-snowflake==1.12.1",
+]
 
 [project.scripts]
 geopulse-generate = "geopulse.synthetic:main"

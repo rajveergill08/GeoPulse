@@ -9,6 +9,13 @@ dist/
 .venv/
 venv/
 
+# dbt
+target/
+dbt_packages/
+logs/
+*.duckdb
+profiles/**/.user.yml
+
 # Generated mobility data
 data/generated/
 data/output/

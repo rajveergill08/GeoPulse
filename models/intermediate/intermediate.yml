@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: int_store_hourly_traffic
+    description: Hourly traffic aggregates at the store and UTC-hour grain.
+    columns:
+      - name: store_id
+        data_tests: [not_null]
+      - name: traffic_hour_utc
+        data_tests: [not_null]
+      - name: unique_visitors
+        data_tests: [not_null]
+      - name: ping_count
+        data_tests: [not_null]
+
+unit_tests:
+  - name: int_store_hourly_traffic_counts_distinct_devices
+    description: Repeated pings count once per visitor while overlapping stores remain separate.
+    model: int_store_hourly_traffic
+    given:
+      - input: ref('stg_ping_store_matches')
+        rows:
+          - {device_id: dev_a, event_ts_utc: "2026-09-22 08:05:00", traffic_hour_utc: "2026-09-22 08:00:00", store_id: store_a}
+          - {device_id: dev_a, event_ts_utc: "2026-09-22 08:20:00", traffic_hour_utc: "2026-09-22 08:00:00", store_id: store_a}
+          - {device_id: dev_b, event_ts_utc: "2026-09-22 08:30:00", traffic_hour_utc: "2026-09-22 08:00:00", store_id: store_a}
+          - {device_id: dev_a, event_ts_utc: "2026-09-22 08:20:00", traffic_hour_utc: "2026-09-22 08:00:00", store_id: store_b}
+          - {device_id: dev_a, event_ts_utc: "2026-09-22 09:05:00", traffic_hour_utc: "2026-09-22 09:00:00", store_id: store_a}
+    expect:
+      rows:
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 08:00:00", unique_visitors: 2, ping_count: 3}
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 09:00:00", unique_visitors: 1, ping_count: 1}
+        - {store_id: store_b, traffic_hour_utc: "2026-09-22 08:00:00", unique_visitors: 1, ping_count: 1}

@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_ping_store_matches
+    description: Cleaned and deduplicated mobility pings matched to store catchments.
+    columns:
+      - name: device_id
+        data_tests: [not_null]
+      - name: event_ts_utc
+        data_tests: [not_null]
+      - name: traffic_hour_utc
+        data_tests: [not_null]
+      - name: store_id
+        data_tests: [not_null]
+      - name: store_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["existing", "proposed", "candidate"]
+
+unit_tests:
+  - name: stg_ping_store_matches_deduplicates_natural_key
+    description: Duplicate device/timestamp/store matches retain only the closest record.
+    model: stg_ping_store_matches
+    given:
+      - input: source('spatial', 'ping_store_matches')
+        rows:
+          - {device_id: dev_a, event_ts: "2026-09-22 08:05:00", ping_latitude: 12.9756, ping_longitude: 77.6066, accuracy_m: 8.0, activity_type: work, store_id: store_a, store_name: Store A, store_status: existing, catchment_radius_m: 500.0, distance_to_store_m: 120.0}
+          - {device_id: dev_a, event_ts: "2026-09-22 08:05:00", ping_latitude: 12.9756, ping_longitude: 77.6066, accuracy_m: 8.0, activity_type: work, store_id: store_a, store_name: Store A, store_status: existing, catchment_radius_m: 500.0, distance_to_store_m: 180.0}
+    expect:
+      rows:
+        - {device_id: dev_a, event_ts_utc: "2026-09-22 08:05:00", store_id: store_a, distance_to_store_m: 120.0}

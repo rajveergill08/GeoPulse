@@ -1,0 +1,15 @@
+geopulse:
+  target: snowflake
+  outputs:
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('DBT_SNOWFLAKE_ACCOUNT', 'replace-me') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER', 'replace-me') }}"
+      password: "{{ env_var('DBT_SNOWFLAKE_PASSWORD', 'replace-me') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE', 'GEOPULSE_TRANSFORMER') }}"
+      database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'GEOPULSE') }}"
+      warehouse: "{{ env_var('DBT_SNOWFLAKE_WAREHOUSE', 'GEOPULSE_WH') }}"
+      schema: "{{ env_var('DBT_SNOWFLAKE_SCHEMA', 'ANALYTICS') }}"
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: geopulse_dbt

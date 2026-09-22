@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: spatial
+    description: Validated point-to-catchment matches produced by the Apache Sedona job.
+    schema: "{{ 'main' if target.type == 'duckdb' else env_var('DBT_SNOWFLAKE_SOURCE_SCHEMA', 'SPATIAL') }}"
+    tables:
+      - name: ping_store_matches
+        description: One row for every valid mobility ping and intersecting store catchment.
+        columns:
+          - name: device_id
+            description: Anonymized device identifier retained for distinct-visitor calculations.
+            data_tests:
+              - not_null
+          - name: event_ts
+            description: Mobility observation timestamp normalized to UTC.
+            data_tests:
+              - not_null
+          - name: store_id
+            description: Stable store or candidate-location identifier.
+            data_tests:
+              - not_null
+          - name: store_status
+            description: Whether the location is existing, proposed, or a candidate.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["existing", "proposed", "candidate"]

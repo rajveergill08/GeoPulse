@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: fct_store_hourly_footfall
+    description: Analytics-ready hourly store footfall used by GeoPulse dashboards and cannibalization models.
+    columns:
+      - name: store_hour_key
+        description: Stable primary key for one store and one UTC hour.
+        data_tests:
+          - unique
+          - not_null
+      - name: store_id
+        data_tests: [not_null]
+      - name: traffic_hour_utc
+        data_tests: [not_null]
+      - name: daypart
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["morning_commute", "midday", "evening_commute", "off_peak"]
+      - name: unique_visitors
+        description: Distinct anonymized devices observed inside the catchment during the hour.
+        data_tests: [not_null]
+      - name: ping_count
+        description: Valid point-to-catchment matches observed during the hour.
+        data_tests: [not_null]
+
+unit_tests:
+  - name: fct_store_hourly_footfall_assigns_dayparts
+    description: Business-facing time bands consistently separate commute and non-commute hours.
+    model: fct_store_hourly_footfall
+    given:
+      - input: ref('int_store_hourly_traffic')
+        rows:
+          - {store_id: store_a, traffic_hour_utc: "2026-09-22 06:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_utc: "2026-09-22 12:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_utc: "2026-09-22 18:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_utc: "2026-09-22 23:00:00", unique_visitors: 1, ping_count: 1}
+    expect:
+      rows:
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 06:00:00", daypart: morning_commute}
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 12:00:00", daypart: midday}
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 18:00:00", daypart: evening_commute}
+        - {store_id: store_a, traffic_hour_utc: "2026-09-22 23:00:00", daypart: off_peak}
