@@ -11,12 +11,7 @@ select
     traffic_hour_utc,
     cast(traffic_hour_utc as date) as traffic_date_utc,
     extract(hour from traffic_hour_utc) as event_hour_utc,
-    case
-        when extract(hour from traffic_hour_utc) between 5 and 9 then 'morning_commute'
-        when extract(hour from traffic_hour_utc) between 10 and 15 then 'midday'
-        when extract(hour from traffic_hour_utc) between 16 and 19 then 'evening_commute'
-        else 'off_peak'
-    end as daypart,
+    {{ traffic_daypart('traffic_hour_utc') }} as daypart,
     unique_visitors,
     ping_count,
     avg_accuracy_m,

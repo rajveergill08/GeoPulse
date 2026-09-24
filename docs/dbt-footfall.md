@@ -18,6 +18,9 @@ pings inside one catchment during the same hour contributes one unique visitor b
 A ping in overlapping catchments contributes independently to each store; this preserves the
 evidence required for the Week 3 cannibalization model.
 
+The downstream store-pair logic and its decision guardrails are documented in
+`docs/cannibalization.md`.
+
 ## Metrics
 
 | Field | Definition |
@@ -33,7 +36,7 @@ store timezone without changing the canonical aggregation grain.
 
 ## Local validation
 
-Requirements: Python 3.10 or newer.
+Requirements: Python 3.11 or newer.
 
 ```powershell
 python -m pip install --editable ".[analytics]"

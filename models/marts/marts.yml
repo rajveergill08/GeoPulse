@@ -25,6 +25,43 @@ models:
         description: Valid point-to-catchment matches observed during the hour.
         data_tests: [not_null]
 
+  - name: fct_store_cannibalization
+    description: Daily daypart-level overlap and incremental-reach metrics for candidate evaluation.
+    columns:
+      - name: store_pair_daypart_key
+        description: Stable primary key for an existing/candidate pair, UTC date, and daypart.
+        data_tests:
+          - unique
+          - not_null
+      - name: existing_store_id
+        data_tests: [not_null]
+      - name: candidate_store_id
+        data_tests: [not_null]
+      - name: candidate_store_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["proposed", "candidate"]
+      - name: traffic_date_utc
+        data_tests: [not_null]
+      - name: daypart
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["morning_commute", "midday", "evening_commute", "off_peak"]
+      - name: shared_visitors
+        description: Devices observed in both catchments during the same UTC date and daypart.
+        data_tests: [not_null]
+      - name: cannibalization_rate
+        description: Shared visitors divided by existing-store unique visitors.
+        data_tests: [not_null]
+      - name: candidate_overlap_rate
+        description: Shared visitors divided by candidate-store unique visitors.
+        data_tests: [not_null]
+      - name: candidate_incremental_reach_rate
+        description: Candidate visitors not seen at the existing store, divided by candidate visitors.
+        data_tests: [not_null]
+
 unit_tests:
   - name: fct_store_hourly_footfall_assigns_dayparts
     description: Business-facing time bands consistently separate commute and non-commute hours.
@@ -42,3 +79,16 @@ unit_tests:
         - {store_id: store_a, traffic_hour_utc: "2026-09-22 12:00:00", daypart: midday}
         - {store_id: store_a, traffic_hour_utc: "2026-09-22 18:00:00", daypart: evening_commute}
         - {store_id: store_a, traffic_hour_utc: "2026-09-22 23:00:00", daypart: off_peak}
+
+  - name: fct_store_cannibalization_calculates_rates
+    description: Three of ten existing visitors produces the required 30 percent traffic-at-risk rate.
+    model: fct_store_cannibalization
+    given:
+      - input: ref('int_store_pair_daypart_overlap')
+        rows:
+          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_utc: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
+          - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_utc: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}
+    expect:
+      rows:
+        - {existing_store_id: store_a, candidate_store_id: store_b, cannibalization_rate: 0.3, candidate_overlap_rate: 0.75, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 0.25}
+        - {existing_store_id: store_a, candidate_store_id: store_c, cannibalization_rate: 0.0, candidate_overlap_rate: 0.0, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 1.0}

@@ -1,11 +1,11 @@
 {% if target.name == 'ci' %}
 
 with expected as (
-    select 'store_a' as store_id, cast('2026-09-22 08:00:00' as timestamp) as traffic_hour_utc, 2 as unique_visitors, 3 as ping_count
+    select 'store_a' as store_id, cast('2026-09-22 08:00:00' as timestamp) as traffic_hour_utc, 10 as unique_visitors, 11 as ping_count
     union all
     select 'store_a', cast('2026-09-22 18:00:00' as timestamp), 3, 3
     union all
-    select 'store_b', cast('2026-09-22 08:00:00' as timestamp), 2, 2
+    select 'store_b', cast('2026-09-22 08:00:00' as timestamp), 4, 4
 ),
 
 actual as (

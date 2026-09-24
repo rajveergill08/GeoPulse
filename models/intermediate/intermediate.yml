@@ -13,6 +13,40 @@ models:
       - name: ping_count
         data_tests: [not_null]
 
+  - name: int_store_device_daypart_visits
+    description: One row per device, store, UTC date, and decision-oriented traffic daypart.
+    columns:
+      - name: device_id
+        data_tests: [not_null]
+      - name: store_id
+        data_tests: [not_null]
+      - name: traffic_date_utc
+        data_tests: [not_null]
+      - name: daypart
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["morning_commute", "midday", "evening_commute", "off_peak"]
+
+  - name: int_store_pair_daypart_overlap
+    description: Visitor overlap for each existing/candidate store pair, UTC date, and daypart.
+    columns:
+      - name: existing_store_id
+        data_tests: [not_null]
+      - name: candidate_store_id
+        data_tests: [not_null]
+      - name: traffic_date_utc
+        data_tests: [not_null]
+      - name: daypart
+        data_tests: [not_null]
+      - name: existing_store_unique_visitors
+        data_tests: [not_null]
+      - name: candidate_store_unique_visitors
+        data_tests: [not_null]
+      - name: shared_visitors
+        data_tests: [not_null]
+
 unit_tests:
   - name: int_store_hourly_traffic_counts_distinct_devices
     description: Repeated pings count once per visitor while overlapping stores remain separate.
@@ -30,3 +64,43 @@ unit_tests:
         - {store_id: store_a, traffic_hour_utc: "2026-09-22 08:00:00", unique_visitors: 2, ping_count: 3}
         - {store_id: store_a, traffic_hour_utc: "2026-09-22 09:00:00", unique_visitors: 1, ping_count: 1}
         - {store_id: store_b, traffic_hour_utc: "2026-09-22 08:00:00", unique_visitors: 1, ping_count: 1}
+
+  - name: int_store_device_daypart_visits_collapses_repeat_pings
+    description: Multiple pings from one device count as one store visit in a daypart.
+    model: int_store_device_daypart_visits
+    given:
+      - input: ref('stg_ping_store_matches')
+        rows:
+          - {device_id: dev_a, event_ts_utc: "2026-09-24 08:05:00", store_id: store_a, store_name: Store A, store_status: existing}
+          - {device_id: dev_a, event_ts_utc: "2026-09-24 08:45:00", store_id: store_a, store_name: Store A, store_status: existing}
+          - {device_id: dev_a, event_ts_utc: "2026-09-24 12:05:00", store_id: store_a, store_name: Store A, store_status: existing}
+    expect:
+      rows:
+        - {device_id: dev_a, store_id: store_a, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+        - {device_id: dev_a, store_id: store_a, traffic_date_utc: "2026-09-24", daypart: midday}
+
+  - name: int_store_pair_daypart_overlap_counts_shared_visitors
+    description: Pair metrics retain zero-overlap candidates and count shared devices once.
+    model: int_store_pair_daypart_overlap
+    given:
+      - input: ref('int_store_device_daypart_visits')
+        rows:
+          - {device_id: dev_01, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_02, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_03, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_04, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_05, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_06, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_07, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_08, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_09, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_10, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_01, store_id: store_b, store_name: Store B, store_status: proposed, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_02, store_id: store_b, store_name: Store B, store_status: proposed, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_03, store_id: store_b, store_name: Store B, store_status: proposed, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_11, store_id: store_b, store_name: Store B, store_status: proposed, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_12, store_id: store_c, store_name: Store C, store_status: candidate, traffic_date_utc: "2026-09-24", daypart: morning_commute}
+    expect:
+      rows:
+        - {existing_store_id: store_a, candidate_store_id: store_b, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
+        - {existing_store_id: store_a, candidate_store_id: store_c, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}

@@ -16,6 +16,7 @@ The current implementation provides:
 - A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for hourly unique visitors, ping volume, and traffic dayparts.
+- Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -72,7 +73,7 @@ for every catchment intersected by a ping. Overlapping matches are retained for 
 cannibalization model. See `docs/spatial-join.md` for data-quality rules, output contracts, and
 scaling notes.
 
-## Build hourly footfall metrics
+## Build footfall and cannibalization metrics
 
 Install the analytics dependencies and run the complete dbt fixture build:
 
@@ -82,9 +83,11 @@ dbt seed --profiles-dir profiles/ci --target ci --full-refresh
 dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 ```
 
-The final `fct_store_hourly_footfall` model has one row per store per UTC hour and distinguishes
-unique visitors from raw ping volume. See `docs/dbt-footfall.md` for metric definitions and
-Snowflake execution instructions.
+`fct_store_hourly_footfall` distinguishes unique visitors from raw ping volume. The downstream
+`fct_store_cannibalization` model compares existing and proposed catchments by date and daypart;
+the deterministic fixture proves a 30% morning traffic-at-risk scenario. See
+`docs/dbt-footfall.md` and `docs/cannibalization.md` for metric definitions, interpretation
+guardrails, and Snowflake execution instructions.
 
 ## Load into Snowflake
 

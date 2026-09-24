@@ -68,7 +68,7 @@ jobs:
       - name: Load synthetic spatial fixtures
         run: dbt seed --profiles-dir profiles/ci --target ci --full-refresh
 
-      - name: Build and test hourly footfall models
+      - name: Build and test analytics models
         run: dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 
       - name: Validate Snowflake project parsing
