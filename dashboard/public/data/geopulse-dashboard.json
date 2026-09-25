@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "source": "GEOPULSE.ANALYTICS.FCT_STORE_CANNIBALIZATION + data/reference/stores.csv",
+    "refreshedAt": "2026-09-25T06:30:00Z",
+    "timezone": "UTC",
+    "synthetic": true
+  },
+  "stores": [
+    {
+      "storeId": "store_a",
+      "storeName": "Store A - MG Road",
+      "status": "existing",
+      "latitude": 12.9756,
+      "longitude": 77.6066,
+      "catchmentRadiusM": 500
+    },
+    {
+      "storeId": "store_b",
+      "storeName": "Store B - Brigade Road",
+      "status": "proposed",
+      "latitude": 12.9719,
+      "longitude": 77.607,
+      "catchmentRadiusM": 500
+    }
+  ],
+  "flows": [
+    {
+      "scenarioId": "store-a-store-b-2026-09-22-morning",
+      "existingStoreId": "store_a",
+      "candidateStoreId": "store_b",
+      "trafficDateUtc": "2026-09-22",
+      "daypart": "morning_commute",
+      "existingStoreUniqueVisitors": 10,
+      "candidateStoreUniqueVisitors": 4,
+      "sharedVisitors": 3,
+      "incrementalCandidateVisitors": 1,
+      "cannibalizationRate": 0.3,
+      "candidateOverlapRate": 0.75,
+      "candidateIncrementalReachRate": 0.25
+    }
+  ]
+}

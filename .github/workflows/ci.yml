@@ -73,3 +73,34 @@ jobs:
 
       - name: Validate Snowflake project parsing
         run: dbt parse --profiles-dir profiles/snowflake --target snowflake --no-partial-parse
+
+  test-dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: dashboard/.nvmrc
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        run: npm ci
+
+      - name: Lint dashboard
+        run: npm run lint
+
+      - name: Test dashboard data contracts
+        run: npm run test
+
+      - name: Audit production dependencies
+        run: npm run audit:critical
+
+      - name: Build production dashboard
+        run: npm run build

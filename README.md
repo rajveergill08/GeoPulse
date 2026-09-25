@@ -17,6 +17,7 @@ The current implementation provides:
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for hourly unique visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
+- A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -88,6 +89,23 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 the deterministic fixture proves a 30% morning traffic-at-risk scenario. See
 `docs/dbt-footfall.md` and `docs/cannibalization.md` for metric definitions, interpretation
 guardrails, and Snowflake execution instructions.
+
+## Run the mobility dashboard
+
+The dashboard requires Node.js 20.19 or newer. It starts with a synthetic, aggregated fixture so
+the full decision workflow can be evaluated without browser access to Snowflake credentials.
+
+```powershell
+Set-Location dashboard
+npm install
+Copy-Item .env.example .env.local
+npm run dev
+```
+
+Set `VITE_MAPBOX_ACCESS_TOKEN` in `.env.local` to enable the basemap. The KPI cards and scenario
+panel remain available without a token. Run `npm run lint`, `npm run test`, and `npm run build`
+before publishing a change. See `dashboard/README.md` for the response contract and production
+integration boundary.
 
 ## Load into Snowflake
 
