@@ -18,6 +18,7 @@ The current implementation provides:
 - Snowflake-ready dbt models for hourly unique visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
+- A timezone-aware Airflow DAG with retry-safe daily partitions and a guarded warehouse handoff.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -89,6 +90,36 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 the deterministic fixture proves a 30% morning traffic-at-risk scenario. See
 `docs/dbt-footfall.md` and `docs/cannibalization.md` for metric definitions, interpretation
 guardrails, and Snowflake execution instructions.
+
+## Orchestrate daily updates
+
+The `geopulse_daily_pipeline` Airflow DAG runs at 02:00 Asia/Kolkata and processes the previous
+logical daily interval. It generates a date-partitioned mobility file, executes the Sedona join,
+requires the resulting Parquet matches to be published to the warehouse, and only then builds and
+tests the dbt marts.
+
+Airflow is supported on Linux; use WSL2 or a Linux container when developing on Windows. Install
+Airflow with its official constraints file. Keep Spark and dbt in separate worker environments so
+their dependency pins cannot replace Airflow's tested versions:
+
+```bash
+AIRFLOW_VERSION=3.3.2
+PYTHON_VERSION="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+
+python -m pip install --editable ".[orchestration]" \
+  --constraint "$CONSTRAINT_URL"
+
+python -m venv .venv-spatial
+.venv-spatial/bin/python -m pip install --editable ".[spatial]"
+python -m venv .venv-analytics
+.venv-analytics/bin/python -m pip install --editable ".[analytics]"
+```
+
+The DAG's first task intentionally fails until `GEOPULSE_WAREHOUSE_LOAD_COMMAND` is configured
+with an idempotent deployment-specific loader. This prevents an expensive Spark run followed by
+dbt reading stale Snowflake data. See `docs/orchestration.md` for the task graph, executable-path
+configuration, local validation, production requirements, and recovery behavior.
 
 ## Run the mobility dashboard
 
