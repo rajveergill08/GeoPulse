@@ -13,10 +13,15 @@ GEOPULSE.SPATIAL.PING_STORE_MATCHES
   -> fct_store_hourly_footfall
 ```
 
-The final model has exactly one row per `(store_id, traffic_hour_utc)`. A device with several GPS
+The final model has exactly one row per `(store_id, traffic_hour_local)`. A device with several GPS
 pings inside one catchment during the same hour contributes one unique visitor but multiple pings.
 A ping in overlapping catchments contributes independently to each store; this preserves the
 evidence required for the Week 3 cannibalization model.
+
+Raw observations remain canonical UTC timestamps. Before hourly bucketing and daypart assignment,
+dbt converts them to `geopulse_retail_timezone`, which defaults to `Asia/Kolkata`. This prevents a
+07:30 Bengaluru commute from being classified as an overnight UTC observation and correctly
+handles local dates that cross a UTC midnight boundary.
 
 The downstream store-pair logic and its decision guardrails are documented in
 `docs/cannibalization.md`.
@@ -25,14 +30,21 @@ The downstream store-pair logic and its decision guardrails are documented in
 
 | Field | Definition |
 | --- | --- |
-| `unique_visitors` | Distinct anonymized `device_id` values per store and UTC hour. |
-| `ping_count` | Valid point-to-catchment rows per store and UTC hour. |
+| `traffic_hour_local` | Start of the retail-local hour used for aggregation. |
+| `traffic_date_local` | Retail-local calendar date derived from the observation. |
+| `retail_timezone` | IANA timezone used for local bucketing and dayparts. |
+| `unique_visitors` | Distinct anonymized `device_id` values per store and retail-local hour. |
+| `ping_count` | Valid point-to-catchment rows per store and retail-local hour. |
 | `avg_accuracy_m` | Mean reported GPS accuracy for matched pings. |
 | `avg_distance_to_store_m` | Mean great-circle distance between matched pings and the store. |
-| `daypart` | Morning commute (05-09), midday (10-15), evening commute (16-19), or off-peak, in UTC. |
+| `daypart` | Morning commute (05-09), midday (10-15), evening commute (16-19), or off-peak, in retail-local time. |
 
-UTC is intentional at this layer. A later presentation model can convert timestamps to a selected
-store timezone without changing the canonical aggregation grain.
+`first_ping_at_utc` and `last_ping_at_utc` preserve canonical event-time evidence. Their local
+counterparts support dashboard labels and audits without changing the source timestamps.
+
+The current local-hour key is intended for retail timezones without daylight-saving transitions,
+including the default `Asia/Kolkata`. A DST-observing city requires an offset-aware hour key before
+changing this variable, otherwise the repeated fall-back hour could be merged.
 
 ## Local validation
 

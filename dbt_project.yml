@@ -4,6 +4,9 @@ config-version: 2
 
 profile: geopulse
 
+vars:
+  geopulse_retail_timezone: "Asia/Kolkata"
+
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests/dbt"]

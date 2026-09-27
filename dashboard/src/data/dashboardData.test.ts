@@ -9,6 +9,7 @@ function validSnapshot(): DashboardSnapshot {
       source: 'GEOPULSE.ANALYTICS.FCT_STORE_CANNIBALIZATION',
       refreshedAt: '2026-09-25T06:30:00Z',
       timezone: 'UTC',
+      retailTimezone: 'Asia/Kolkata',
       synthetic: true
     },
     stores: [
@@ -34,7 +35,7 @@ function validSnapshot(): DashboardSnapshot {
         scenarioId: 'morning-comparison',
         existingStoreId: 'store_a',
         candidateStoreId: 'store_b',
-        trafficDateUtc: '2026-09-22',
+        trafficDateLocal: '2026-09-22',
         daypart: 'morning_commute',
         existingStoreUniqueVisitors: 10,
         candidateStoreUniqueVisitors: 4,
@@ -70,6 +71,15 @@ describe('parseDashboardSnapshot', () => {
 
     expect(() => parseDashboardSnapshot(snapshot)).toThrow(
       'Dashboard flow references a store that is not in the response.'
+    );
+  });
+
+  it('requires the retail timezone used by local dates and dayparts', () => {
+    const snapshot = validSnapshot();
+    snapshot.metadata.retailTimezone = '';
+
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard response contains invalid store metadata.'
     );
   });
 });

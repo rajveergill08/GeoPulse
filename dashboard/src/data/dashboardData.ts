@@ -49,7 +49,7 @@ function isFlow(value: unknown): value is CannibalizationFlow {
     typeof value.scenarioId === 'string' &&
     typeof value.existingStoreId === 'string' &&
     typeof value.candidateStoreId === 'string' &&
-    typeof value.trafficDateUtc === 'string' &&
+    typeof value.trafficDateLocal === 'string' &&
     ['morning_commute', 'midday', 'evening_commute', 'off_peak'].includes(
       String(value.daypart)
     ) &&
@@ -80,6 +80,8 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
     typeof metadata.source === 'string' &&
     typeof metadata.refreshedAt === 'string' &&
     metadata.timezone === 'UTC' &&
+    typeof metadata.retailTimezone === 'string' &&
+    metadata.retailTimezone.length > 0 &&
     typeof metadata.synthetic === 'boolean';
 
   if (!metadataIsValid || !Array.isArray(value.stores) || !value.stores.every(isStore)) {

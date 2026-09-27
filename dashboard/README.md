@@ -29,15 +29,19 @@ aggregated fields required by this interface.
 
 The endpoint returns one snapshot with:
 
-- `metadata`: source relation, UTC refresh timestamp, timezone, and synthetic-data flag.
+- `metadata`: source relation, UTC refresh timestamp, retail timezone, and synthetic-data flag.
 - `stores`: store identity, status, coordinates, and catchment radius.
-- `flows`: a date/daypart comparison between an existing and candidate store, including unique
-  visitors, shared visitors, incremental visitors, and three rates expressed from 0 to 1.
+- `flows`: a retail-local date/daypart comparison between an existing and candidate store,
+  including unique visitors, shared visitors, incremental visitors, and three rates expressed
+  from 0 to 1.
 
 Every flow must reference stores in the same response. Shared visitors cannot exceed either
 store's visitors, incremental visitors must equal candidate visitors minus shared visitors, and
 candidate overlap plus incremental reach must equal 100%. The client rejects a snapshot that
 breaks these rules instead of displaying misleading metrics.
+
+`trafficDateLocal` and all displayed dayparts use `metadata.retailTimezone`; `refreshedAt` remains
+an ISO-8601 UTC timestamp for freshness checks.
 
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
 fixture in `GEOPULSE.ANALYTICS.FCT_STORE_CANNIBALIZATION`. Its refresh timestamp is fixed evidence,

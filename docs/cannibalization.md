@@ -1,8 +1,8 @@
 # Store cannibalization model
 
 The Week 3 dbt layer compares anonymized devices observed around an existing store with devices
-observed around a proposed or candidate store. It produces decision-ready overlap metrics by UTC
-date and traffic daypart while keeping device identifiers out of the final mart.
+observed around a proposed or candidate store. It produces decision-ready overlap metrics by
+retail-local date and traffic daypart while keeping device identifiers out of the final mart.
 
 ## Lineage and grain
 
@@ -14,9 +14,12 @@ stg_ping_store_matches
 ```
 
 The final grain is one row per
-`(existing_store_id, candidate_store_id, traffic_date_utc, daypart)`. Only pairs with observed
+`(existing_store_id, candidate_store_id, traffic_date_local, daypart)`. Only pairs with observed
 traffic at both locations during the same date and daypart are emitted. Repeated pings from the
 same device inside one store catchment collapse to a single visit before overlap is calculated.
+
+`traffic_date_local` and `daypart` use the configurable `geopulse_retail_timezone` value. The
+default is `Asia/Kolkata`, while canonical source and audit timestamps remain UTC.
 
 ## KPI framework
 
@@ -36,7 +39,7 @@ B's overlap rate is `3 / 4 = 0.75` and its incremental reach rate is `1 / 4 = 0.
 `cannibalization_rate` is a traffic-at-risk proxy, not a causal estimate of lost sales. A GPS
 observation inside both 500-metre catchments does not prove a store visit, purchase, or diversion
 caused by opening the candidate. Before using a decision threshold, calibrate the metric against
-store transactions, conversion rates, weekday coverage, local time zones, and pre/post-opening
+store transactions, conversion rates, weekday coverage, and pre/post-opening
 outcomes.
 
 The device-level intermediate model exists only to calculate overlap. Production roles should

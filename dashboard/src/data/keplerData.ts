@@ -71,7 +71,7 @@ export function buildKeplerDatasets(
           {name: 'shared_visitors', type: 'integer', format: ''},
           {name: 'cannibalization_rate', type: 'real', format: ''},
           {name: 'daypart', type: 'string', format: ''},
-          {name: 'traffic_date_utc', type: 'string', format: ''}
+          {name: 'traffic_date_local', type: 'string', format: ''}
         ],
         rows: [
           [
@@ -85,7 +85,7 @@ export function buildKeplerDatasets(
             flow.sharedVisitors,
             flow.cannibalizationRate,
             flow.daypart,
-            flow.trafficDateUtc
+            flow.trafficDateLocal
           ]
         ]
       }

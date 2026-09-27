@@ -53,7 +53,7 @@ export function ScenarioPanel({
           <dt>Traffic window</dt>
           <dd>
             {formatDaypart(selectedFlow.daypart)} ·{' '}
-            {formatTrafficDate(selectedFlow.trafficDateUtc)}
+            {formatTrafficDate(selectedFlow.trafficDateLocal)}
           </dd>
         </div>
         <div>
@@ -75,7 +75,10 @@ export function ScenarioPanel({
       <div className="source-note">
         <span>Source</span>
         <p>{snapshot.metadata.source}</p>
-        <small>Canonical timestamps: {snapshot.metadata.timezone}</small>
+        <small>
+          Retail time: {snapshot.metadata.retailTimezone} · Refresh time:{' '}
+          {snapshot.metadata.timezone}
+        </small>
       </div>
     </aside>
   );

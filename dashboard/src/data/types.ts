@@ -6,6 +6,7 @@ export interface DashboardMetadata {
   source: string;
   refreshedAt: string;
   timezone: 'UTC';
+  retailTimezone: string;
   synthetic: boolean;
 }
 
@@ -22,7 +23,7 @@ export interface CannibalizationFlow {
   scenarioId: string;
   existingStoreId: string;
   candidateStoreId: string;
-  trafficDateUtc: string;
+  trafficDateLocal: string;
   daypart: Daypart;
   existingStoreUniqueVisitors: number;
   candidateStoreUniqueVisitors: number;

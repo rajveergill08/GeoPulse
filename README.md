@@ -15,7 +15,7 @@ The current implementation provides:
 - Snowflake DDL and loading SQL using native `GEOGRAPHY` points.
 - A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
-- Snowflake-ready dbt models for hourly unique visitors, ping volume, and traffic dayparts.
+- Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
 - A timezone-aware Airflow DAG with retry-safe daily partitions and a guarded warehouse handoff.

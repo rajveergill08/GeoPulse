@@ -9,7 +9,7 @@ select
         '|',
         candidate_store_id,
         '|',
-        cast(traffic_date_utc as varchar),
+        cast(traffic_date_local as varchar),
         '|',
         daypart
     ) as store_pair_daypart_key,
@@ -18,7 +18,8 @@ select
     candidate_store_id,
     candidate_store_name,
     candidate_store_status,
-    traffic_date_utc,
+    traffic_date_local,
+    '{{ var("geopulse_retail_timezone", "Asia/Kolkata") }}' as retail_timezone,
     daypart,
     existing_store_unique_visitors,
     candidate_store_unique_visitors,

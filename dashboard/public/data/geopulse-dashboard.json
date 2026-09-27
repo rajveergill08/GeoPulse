@@ -3,6 +3,7 @@
     "source": "GEOPULSE.ANALYTICS.FCT_STORE_CANNIBALIZATION + data/reference/stores.csv",
     "refreshedAt": "2026-09-25T06:30:00Z",
     "timezone": "UTC",
+    "retailTimezone": "Asia/Kolkata",
     "synthetic": true
   },
   "stores": [
@@ -28,7 +29,7 @@
       "scenarioId": "store-a-store-b-2026-09-22-morning",
       "existingStoreId": "store_a",
       "candidateStoreId": "store_b",
-      "trafficDateUtc": "2026-09-22",
+      "trafficDateLocal": "2026-09-22",
       "daypart": "morning_commute",
       "existingStoreUniqueVisitors": 10,
       "candidateStoreUniqueVisitors": 4,

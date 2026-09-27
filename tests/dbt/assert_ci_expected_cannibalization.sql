@@ -4,7 +4,7 @@ with expected as (
     select
         'store_a' as existing_store_id,
         'store_b' as candidate_store_id,
-        cast('2026-09-22' as date) as traffic_date_utc,
+        cast('2026-09-22' as date) as traffic_date_local,
         'morning_commute' as daypart,
         10 as existing_store_unique_visitors,
         4 as candidate_store_unique_visitors,
@@ -19,7 +19,7 @@ actual as (
     select
         existing_store_id,
         candidate_store_id,
-        traffic_date_utc,
+        traffic_date_local,
         daypart,
         existing_store_unique_visitors,
         candidate_store_unique_visitors,
@@ -34,13 +34,13 @@ actual as (
 select
     coalesce(expected.existing_store_id, actual.existing_store_id) as existing_store_id,
     coalesce(expected.candidate_store_id, actual.candidate_store_id) as candidate_store_id,
-    coalesce(expected.traffic_date_utc, actual.traffic_date_utc) as traffic_date_utc,
+    coalesce(expected.traffic_date_local, actual.traffic_date_local) as traffic_date_local,
     coalesce(expected.daypart, actual.daypart) as daypart
 from expected
 full outer join actual
     on expected.existing_store_id = actual.existing_store_id
    and expected.candidate_store_id = actual.candidate_store_id
-   and expected.traffic_date_utc = actual.traffic_date_utc
+   and expected.traffic_date_local = actual.traffic_date_local
    and expected.daypart = actual.daypart
 where expected.existing_store_id is null
    or actual.existing_store_id is null

@@ -7,7 +7,7 @@ const flow: CannibalizationFlow = {
   scenarioId: 'morning-comparison',
   existingStoreId: 'store_a',
   candidateStoreId: 'store_b',
-  trafficDateUtc: '2026-09-22',
+  trafficDateLocal: '2026-09-22',
   daypart: 'morning_commute',
   existingStoreUniqueVisitors: 10,
   candidateStoreUniqueVisitors: 4,
@@ -23,6 +23,7 @@ const snapshot: DashboardSnapshot = {
     source: 'test',
     refreshedAt: '2026-09-25T06:30:00Z',
     timezone: 'UTC',
+    retailTimezone: 'Asia/Kolkata',
     synthetic: true
   },
   stores: [
@@ -79,7 +80,8 @@ describe('buildKeplerDatasets', () => {
         'origin_latitude',
         'origin_longitude',
         'destination_latitude',
-        'destination_longitude'
+        'destination_longitude',
+        'traffic_date_local'
       ])
     );
   });

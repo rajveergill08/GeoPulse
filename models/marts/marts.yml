@@ -5,13 +5,17 @@ models:
     description: Analytics-ready hourly store footfall used by GeoPulse dashboards and cannibalization models.
     columns:
       - name: store_hour_key
-        description: Stable primary key for one store and one UTC hour.
+        description: Stable primary key for one store, retail-local hour, and configured timezone.
         data_tests:
           - unique
           - not_null
       - name: store_id
         data_tests: [not_null]
-      - name: traffic_hour_utc
+      - name: traffic_hour_local
+        data_tests: [not_null]
+      - name: traffic_date_local
+        data_tests: [not_null]
+      - name: retail_timezone
         data_tests: [not_null]
       - name: daypart
         data_tests:
@@ -29,7 +33,7 @@ models:
     description: Daily daypart-level overlap and incremental-reach metrics for candidate evaluation.
     columns:
       - name: store_pair_daypart_key
-        description: Stable primary key for an existing/candidate pair, UTC date, and daypart.
+        description: Stable primary key for an existing/candidate pair, retail-local date, and daypart.
         data_tests:
           - unique
           - not_null
@@ -42,7 +46,9 @@ models:
           - accepted_values:
               arguments:
                 values: ["proposed", "candidate"]
-      - name: traffic_date_utc
+      - name: traffic_date_local
+        data_tests: [not_null]
+      - name: retail_timezone
         data_tests: [not_null]
       - name: daypart
         data_tests:
@@ -50,7 +56,7 @@ models:
               arguments:
                 values: ["morning_commute", "midday", "evening_commute", "off_peak"]
       - name: shared_visitors
-        description: Devices observed in both catchments during the same UTC date and daypart.
+        description: Devices observed in both catchments during the same retail-local date and daypart.
         data_tests: [not_null]
       - name: cannibalization_rate
         description: Shared visitors divided by existing-store unique visitors.
@@ -69,16 +75,16 @@ unit_tests:
     given:
       - input: ref('int_store_hourly_traffic')
         rows:
-          - {store_id: store_a, traffic_hour_utc: "2026-09-22 06:00:00", unique_visitors: 1, ping_count: 1}
-          - {store_id: store_a, traffic_hour_utc: "2026-09-22 12:00:00", unique_visitors: 1, ping_count: 1}
-          - {store_id: store_a, traffic_hour_utc: "2026-09-22 18:00:00", unique_visitors: 1, ping_count: 1}
-          - {store_id: store_a, traffic_hour_utc: "2026-09-22 23:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_local: "2026-09-22 06:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_local: "2026-09-22 12:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_local: "2026-09-22 18:00:00", unique_visitors: 1, ping_count: 1}
+          - {store_id: store_a, traffic_hour_local: "2026-09-22 23:00:00", unique_visitors: 1, ping_count: 1}
     expect:
       rows:
-        - {store_id: store_a, traffic_hour_utc: "2026-09-22 06:00:00", daypart: morning_commute}
-        - {store_id: store_a, traffic_hour_utc: "2026-09-22 12:00:00", daypart: midday}
-        - {store_id: store_a, traffic_hour_utc: "2026-09-22 18:00:00", daypart: evening_commute}
-        - {store_id: store_a, traffic_hour_utc: "2026-09-22 23:00:00", daypart: off_peak}
+        - {store_id: store_a, traffic_hour_local: "2026-09-22 06:00:00", daypart: morning_commute}
+        - {store_id: store_a, traffic_hour_local: "2026-09-22 12:00:00", daypart: midday}
+        - {store_id: store_a, traffic_hour_local: "2026-09-22 18:00:00", daypart: evening_commute}
+        - {store_id: store_a, traffic_hour_local: "2026-09-22 23:00:00", daypart: off_peak}
 
   - name: fct_store_cannibalization_calculates_rates
     description: Three of ten existing visitors produces the required 30 percent traffic-at-risk rate.
@@ -86,8 +92,8 @@ unit_tests:
     given:
       - input: ref('int_store_pair_daypart_overlap')
         rows:
-          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_utc: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
-          - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_utc: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}
+          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
+          - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}
     expect:
       rows:
         - {existing_store_id: store_a, candidate_store_id: store_b, cannibalization_rate: 0.3, candidate_overlap_rate: 0.75, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 0.25}
