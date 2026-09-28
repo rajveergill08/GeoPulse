@@ -65,6 +65,16 @@ with DAG(
         do_xcom_push=False,
     )
 
+    validate_spatial_quality = BashOperator(
+        task_id="validate_spatial_quality",
+        bash_command=CONFIG.spatial_quality_command(),
+        cwd=str(CONFIG.project_root),
+        env=TASK_ENVIRONMENT,
+        append_env=True,
+        execution_timeout=timedelta(minutes=10),
+        do_xcom_push=False,
+    )
+
     load_spatial_matches = BashOperator(
         task_id="load_spatial_matches",
         bash_command=CONFIG.warehouse_load_wrapper_command(),
@@ -89,6 +99,7 @@ with DAG(
         validate_runtime_configuration
         >> generate_daily_pings
         >> run_sedona_spatial_join
+        >> validate_spatial_quality
         >> load_spatial_matches
         >> build_dbt_analytics
     )

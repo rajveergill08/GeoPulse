@@ -10,12 +10,14 @@ keeps credentials and network access out of DAG parsing.
 validate_runtime_configuration
   -> generate_daily_pings
   -> run_sedona_spatial_join
+  -> validate_spatial_quality
   -> load_spatial_matches
   -> build_dbt_analytics
 ```
 
 The preflight task checks the loader command, executables, store reference, dbt profile, and data
-root before the 9.6-million-row default workload can start.
+root before the 9.6-million-row default workload can start. The spatial quality task then checks
+the completed daily output before any warehouse state can change.
 
 `geopulse_daily_pipeline` runs at 02:00 in `Asia/Kolkata`, does not create historical runs
 automatically (`catchup=False`), and permits only one active run. Each task retries twice after a
@@ -27,6 +29,7 @@ The default development paths for a logical date such as 26 September 2026 are:
 ```text
 data/generated/20260926/mobile_pings.csv.gz
 data/output/spatial/20260926/
+data/output/spatial/20260926/audit/
 data/output/spatial/20260926/matches/
 ```
 
@@ -89,6 +92,8 @@ runtime worker environment and is not embedded in the serialized DAG.
 | `GEOPULSE_GENERATOR_SEED` | `42` | Deterministic generator seed. |
 | `GEOPULSE_SPARK_MASTER` | `local[*]` | Spark master URL; replace for a distributed cluster. |
 | `GEOPULSE_SHUFFLE_PARTITIONS` | `200` | Spark shuffle partition count. |
+| `GEOPULSE_MAX_PING_REJECTION_RATE` | `0.01` | Maximum rejected-ping fraction accepted by the spatial quality gate. |
+| `GEOPULSE_MAX_REJECTED_STORE_ROWS` | `0` | Maximum invalid or duplicate store rows accepted per batch. |
 | `GEOPULSE_DBT_PROFILES_DIR` | `<project>/profiles/snowflake` | Production dbt profile directory. |
 | `GEOPULSE_DBT_TARGET` | `snowflake` | dbt target name. |
 | `GEOPULSE_WAREHOUSE_LOAD_COMMAND` | No default | Required batch-aware Parquet publishing command. |
@@ -96,6 +101,38 @@ runtime worker environment and is not embedded in the serialized DAG.
 Use a smaller value such as `GEOPULSE_DEVICES=1000` for a development run. Production workers
 also require Java 17, access to compatible Sedona Maven packages, Snowflake connectivity, and the
 environment variables referenced by `profiles/snowflake/profiles.yml`.
+
+## Spatial quality boundary
+
+`validate_spatial_quality` reads every Spark `part-*.json` file under the run's `audit/`
+directory and fails closed unless all eight audit metrics appear exactly once. It verifies:
+
+- the raw ping count equals `devices * (1,440 / interval_minutes)`;
+- raw ping and store totals reconcile exactly to their valid and rejected totals;
+- at least one valid store, matched row, and matched device exists;
+- matched-device counts cannot exceed valid pings or match rows;
+- ping and store rejection limits are respected; and
+- one or more Parquet parts exist recursively under `matches/`, and every part has valid leading
+  and trailing Parquet container markers.
+
+Valid pings are not required to match a catchment because citywide observations outside every
+500-metre store radius are expected. A ping may also match multiple overlapping catchments, so
+match rows can legitimately exceed valid ping rows.
+
+Run the same gate independently with:
+
+```bash
+geopulse-validate-spatial \
+  --audit data/output/spatial/20260926/audit \
+  --matches data/output/spatial/20260926/matches \
+  --expected-ping-rows 9600000 \
+  --max-ping-rejection-rate 0.01 \
+  --max-rejected-store-rows 0
+```
+
+The command prints a JSON quality report on success and exits nonzero with the violated rules on
+failure. Inspect `rejected_pings/`, `rejected_stores/`, and the audit files before retrying; do not
+bypass the gate to publish a failed batch.
 
 ## Required warehouse publishing boundary
 
@@ -110,6 +147,7 @@ The loader receives these rendered environment variables:
 - `GEOPULSE_RUN_DATE` and `GEOPULSE_RUN_PARTITION`
 - `GEOPULSE_PINGS_PATH`
 - `GEOPULSE_SPATIAL_OUTPUT`
+- `GEOPULSE_SPATIAL_AUDIT_PATH`
 - `GEOPULSE_SPATIAL_MATCHES_PATH`
 
 The deployment-specific command must upload only the indicated match partition, then replace or

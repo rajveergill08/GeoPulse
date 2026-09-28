@@ -35,6 +35,9 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertEqual(config.stores_path, self.project_root / "data/reference/stores.csv")
         self.assertEqual(config.dbt_profiles_dir, self.project_root / "profiles/snowflake")
         self.assertEqual(config.dbt_target, "snowflake")
+        self.assertEqual(config.expected_ping_rows, 9_600_000)
+        self.assertEqual(config.max_ping_rejection_rate, 0.01)
+        self.assertEqual(config.max_rejected_store_rows, 0)
 
     def test_environment_overrides_are_validated_and_resolved(self) -> None:
         config = DailyPipelineConfig.from_environment(
@@ -49,6 +52,8 @@ class DailyPipelineConfigTests(unittest.TestCase):
                 "GEOPULSE_GENERATOR_SEED": "7",
                 "GEOPULSE_SPARK_MASTER": "spark://cluster:7077",
                 "GEOPULSE_SHUFFLE_PARTITIONS": "16",
+                "GEOPULSE_MAX_PING_REJECTION_RATE": "0.025",
+                "GEOPULSE_MAX_REJECTED_STORE_ROWS": "1",
             },
         )
 
@@ -60,6 +65,9 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertEqual(config.generator_seed, 7)
         self.assertEqual(config.spark_master, "spark://cluster:7077")
         self.assertEqual(config.shuffle_partitions, 16)
+        self.assertEqual(config.expected_ping_rows, 6_000)
+        self.assertEqual(config.max_ping_rejection_rate, 0.025)
+        self.assertEqual(config.max_rejected_store_rows, 1)
 
     def test_invalid_numeric_environment_values_fail_during_dag_parse(self) -> None:
         invalid_cases = (
@@ -72,6 +80,18 @@ class DailyPipelineConfigTests(unittest.TestCase):
             (
                 {"GEOPULSE_SHUFFLE_PARTITIONS": "-1"},
                 "GEOPULSE_SHUFFLE_PARTITIONS must be greater than zero",
+            ),
+            (
+                {"GEOPULSE_MAX_PING_REJECTION_RATE": "many"},
+                "GEOPULSE_MAX_PING_REJECTION_RATE must be a number",
+            ),
+            (
+                {"GEOPULSE_MAX_PING_REJECTION_RATE": "1.1"},
+                "GEOPULSE_MAX_PING_REJECTION_RATE must be between 0 and 1",
+            ),
+            (
+                {"GEOPULSE_MAX_REJECTED_STORE_ROWS": "-1"},
+                "GEOPULSE_MAX_REJECTED_STORE_ROWS must not be negative",
             ),
         )
 
@@ -89,7 +109,11 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertIn(RUN_PARTITION_TEMPLATE, environment["GEOPULSE_PINGS_PATH"])
         self.assertTrue(environment["GEOPULSE_PINGS_PATH"].endswith("mobile_pings.csv.gz"))
         self.assertIn(RUN_PARTITION_TEMPLATE, environment["GEOPULSE_SPATIAL_OUTPUT"])
+        self.assertTrue(environment["GEOPULSE_SPATIAL_AUDIT_PATH"].endswith("audit"))
         self.assertTrue(environment["GEOPULSE_SPATIAL_MATCHES_PATH"].endswith("matches"))
+        self.assertEqual(environment["GEOPULSE_EXPECTED_PING_ROWS"], "9600000")
+        self.assertEqual(environment["GEOPULSE_MAX_PING_REJECTION_RATE"], "0.01")
+        self.assertEqual(environment["GEOPULSE_MAX_REJECTED_STORE_ROWS"], "0")
         self.assertNotIn("GEOPULSE_WAREHOUSE_LOAD_COMMAND", environment)
 
     def test_commands_preserve_pipeline_contract_and_retry_safety(self) -> None:
@@ -106,6 +130,16 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertIn('--pings "$GEOPULSE_PINGS_PATH"', spatial_command)
         self.assertIn('--output "$GEOPULSE_SPATIAL_OUTPUT"', spatial_command)
         self.assertIn("--write-mode overwrite", spatial_command)
+
+        quality_command = config.spatial_quality_command()
+        self.assertIn("-m geopulse.quality", quality_command)
+        self.assertIn('--audit "$GEOPULSE_SPATIAL_AUDIT_PATH"', quality_command)
+        self.assertIn('--matches "$GEOPULSE_SPATIAL_MATCHES_PATH"', quality_command)
+        self.assertIn('--expected-ping-rows "$GEOPULSE_EXPECTED_PING_ROWS"', quality_command)
+        self.assertIn(
+            '--max-ping-rejection-rate "$GEOPULSE_MAX_PING_REJECTION_RATE"',
+            quality_command,
+        )
 
         publish_command = config.warehouse_load_wrapper_command()
         self.assertIn("GEOPULSE_WAREHOUSE_LOAD_COMMAND must publish", publish_command)

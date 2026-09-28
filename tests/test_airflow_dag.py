@@ -54,6 +54,7 @@ class AirflowDagTests(unittest.TestCase):
             "validate_runtime_configuration",
             "generate_daily_pings",
             "run_sedona_spatial_join",
+            "validate_spatial_quality",
             "load_spatial_matches",
             "build_dbt_analytics",
         )
@@ -68,6 +69,7 @@ class AirflowDagTests(unittest.TestCase):
         validation_task = dag.get_task("validate_runtime_configuration")
         generate_task = dag.get_task("generate_daily_pings")
         spatial_task = dag.get_task("run_sedona_spatial_join")
+        quality_task = dag.get_task("validate_spatial_quality")
         load_task = dag.get_task("load_spatial_matches")
         dbt_task = dag.get_task("build_dbt_analytics")
 
@@ -75,6 +77,10 @@ class AirflowDagTests(unittest.TestCase):
         self.assertTrue(validation_task.append_env)
         self.assertIn("data_interval_start", generate_task.env["GEOPULSE_RUN_DATE"])
         self.assertIn("data_interval_start", spatial_task.env["GEOPULSE_SPATIAL_OUTPUT"])
+        self.assertIn("geopulse.quality", quality_task.bash_command)
+        self.assertIn("GEOPULSE_SPATIAL_AUDIT_PATH", quality_task.bash_command)
+        self.assertIn("data_interval_start", quality_task.env["GEOPULSE_SPATIAL_AUDIT_PATH"])
+        self.assertEqual(quality_task.env["GEOPULSE_EXPECTED_PING_ROWS"], "9600000")
         self.assertIn("must publish", load_task.bash_command)
         self.assertNotIn("GEOPULSE_WAREHOUSE_LOAD_COMMAND", load_task.env)
         self.assertTrue(load_task.append_env)
@@ -107,6 +113,14 @@ class AirflowDagTests(unittest.TestCase):
         self.assertEqual(
             rendered_environment["GEOPULSE_PINGS_PATH"],
             str(self.project_root / "data/generated/20260926/mobile_pings.csv.gz"),
+        )
+        self.assertEqual(
+            rendered_environment["GEOPULSE_SPATIAL_AUDIT_PATH"],
+            str(self.project_root / "data/output/spatial/20260926/audit"),
+        )
+        self.assertEqual(
+            rendered_environment["GEOPULSE_SPATIAL_MATCHES_PATH"],
+            str(self.project_root / "data/output/spatial/20260926/matches"),
         )
 
 

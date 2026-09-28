@@ -32,6 +32,7 @@ orchestration = [
 [project.scripts]
 geopulse-generate = "geopulse.synthetic:main"
 geopulse-spatial-join = "geopulse.spatial:main"
+geopulse-validate-spatial = "geopulse.quality:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

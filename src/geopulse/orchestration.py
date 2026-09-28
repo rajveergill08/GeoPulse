@@ -45,6 +45,32 @@ def _read_integer(
         raise ValueError(f"{variable_name} must be an integer") from exc
 
 
+def _read_non_negative_integer(
+    environment: Mapping[str, str],
+    variable_name: str,
+    default: int,
+) -> int:
+    value = _read_integer(environment, variable_name, default)
+    if value < 0:
+        raise ValueError(f"{variable_name} must not be negative")
+    return value
+
+
+def _read_probability(
+    environment: Mapping[str, str],
+    variable_name: str,
+    default: float,
+) -> float:
+    raw_value = environment.get(variable_name, str(default))
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{variable_name} must be a number") from exc
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{variable_name} must be between 0 and 1")
+    return value
+
+
 def _read_non_empty(
     environment: Mapping[str, str],
     variable_name: str,
@@ -85,6 +111,8 @@ class DailyPipelineConfig:
     generator_seed: int = 42
     spark_master: str = "local[*]"
     shuffle_partitions: int = 200
+    max_ping_rejection_rate: float = 0.01
+    max_rejected_store_rows: int = 0
     dbt_target: str = "snowflake"
 
     def __post_init__(self) -> None:
@@ -94,6 +122,10 @@ class DailyPipelineConfig:
             raise ValueError("interval_minutes must be a positive divisor of 1440")
         if self.shuffle_partitions <= 0:
             raise ValueError("shuffle_partitions must be greater than zero")
+        if not 0.0 <= self.max_ping_rejection_rate <= 1.0:
+            raise ValueError("max_ping_rejection_rate must be between 0 and 1")
+        if self.max_rejected_store_rows < 0:
+            raise ValueError("max_rejected_store_rows must not be negative")
         for field_name in (
             "python_executable",
             "dbt_executable",
@@ -161,6 +193,16 @@ class DailyPipelineConfig:
                 "GEOPULSE_SHUFFLE_PARTITIONS",
                 200,
             ),
+            max_ping_rejection_rate=_read_probability(
+                values,
+                "GEOPULSE_MAX_PING_REJECTION_RATE",
+                0.01,
+            ),
+            max_rejected_store_rows=_read_non_negative_integer(
+                values,
+                "GEOPULSE_MAX_REJECTED_STORE_ROWS",
+                0,
+            ),
             dbt_target=_read_non_empty(values, "GEOPULSE_DBT_TARGET", "snowflake"),
         )
 
@@ -181,6 +223,12 @@ class DailyPipelineConfig:
 
         return _templated_path(self.data_root, "output", "spatial", RUN_PARTITION_TEMPLATE)
 
+    @property
+    def expected_ping_rows(self) -> int:
+        """Return the exact row count produced by the configured one-day generator."""
+
+        return self.devices * (1_440 // self.interval_minutes)
+
     def task_environment(self) -> dict[str, str]:
         """Return environment values rendered independently for every Airflow run."""
 
@@ -194,6 +242,13 @@ class DailyPipelineConfig:
             "GEOPULSE_PINGS_PATH": self.pings_path,
             "GEOPULSE_STORES_PATH": str(self.stores_path),
             "GEOPULSE_SPATIAL_OUTPUT": self.spatial_output_path,
+            "GEOPULSE_SPATIAL_AUDIT_PATH": _templated_path(
+                Path(self.data_root),
+                "output",
+                "spatial",
+                RUN_PARTITION_TEMPLATE,
+                "audit",
+            ),
             "GEOPULSE_SPATIAL_MATCHES_PATH": _templated_path(
                 Path(self.data_root),
                 "output",
@@ -201,6 +256,9 @@ class DailyPipelineConfig:
                 RUN_PARTITION_TEMPLATE,
                 "matches",
             ),
+            "GEOPULSE_EXPECTED_PING_ROWS": str(self.expected_ping_rows),
+            "GEOPULSE_MAX_PING_REJECTION_RATE": str(self.max_ping_rejection_rate),
+            "GEOPULSE_MAX_REJECTED_STORE_ROWS": str(self.max_rejected_store_rows),
             "GEOPULSE_DBT_PROFILES_DIR": str(self.dbt_profiles_dir),
             "GEOPULSE_DBT_TARGET": self.dbt_target,
         }
@@ -263,6 +321,21 @@ echo "GeoPulse runtime configuration validated."
                 f"--master {shlex.quote(self.spark_master)}",
                 f"--shuffle-partitions {self.shuffle_partitions}",
                 "--write-mode overwrite",
+            )
+        )
+
+    def spatial_quality_command(self) -> str:
+        """Build the fail-closed audit and Parquet validation command."""
+
+        return " ".join(
+            (
+                shlex.quote(self.python_executable),
+                "-m geopulse.quality",
+                '--audit "$GEOPULSE_SPATIAL_AUDIT_PATH"',
+                '--matches "$GEOPULSE_SPATIAL_MATCHES_PATH"',
+                '--expected-ping-rows "$GEOPULSE_EXPECTED_PING_ROWS"',
+                '--max-ping-rejection-rate "$GEOPULSE_MAX_PING_REJECTION_RATE"',
+                '--max-rejected-store-rows "$GEOPULSE_MAX_REJECTED_STORE_ROWS"',
             )
         )
 

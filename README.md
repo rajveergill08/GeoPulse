@@ -18,7 +18,7 @@ The current implementation provides:
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
-- A timezone-aware Airflow DAG with retry-safe daily partitions and a guarded warehouse handoff.
+- A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -95,8 +95,8 @@ guardrails, and Snowflake execution instructions.
 
 The `geopulse_daily_pipeline` Airflow DAG runs at 02:00 Asia/Kolkata and processes the previous
 logical daily interval. It generates a date-partitioned mobility file, executes the Sedona join,
-requires the resulting Parquet matches to be published to the warehouse, and only then builds and
-tests the dbt marts.
+reconciles the spatial audit, enforces rejection limits, verifies that partitioned Parquet matches
+exist, and only then permits warehouse publishing and the dbt mart build.
 
 Airflow is supported on Linux; use WSL2 or a Linux container when developing on Windows. Install
 Airflow with its official constraints file. Keep Spark and dbt in separate worker environments so
@@ -118,8 +118,9 @@ python -m venv .venv-analytics
 
 The DAG's first task intentionally fails until `GEOPULSE_WAREHOUSE_LOAD_COMMAND` is configured
 with an idempotent deployment-specific loader. This prevents an expensive Spark run followed by
-dbt reading stale Snowflake data. See `docs/orchestration.md` for the task graph, executable-path
-configuration, local validation, production requirements, and recovery behavior.
+dbt reading stale Snowflake data. The post-Sedona gate separately prevents empty, incomplete, or
+high-rejection batches from reaching that loader. See `docs/orchestration.md` for the task graph,
+quality policy, executable-path configuration, and recovery behavior.
 
 ## Run the mobility dashboard
 
