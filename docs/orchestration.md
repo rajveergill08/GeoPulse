@@ -150,9 +150,12 @@ The loader receives these rendered environment variables:
 - `GEOPULSE_SPATIAL_AUDIT_PATH`
 - `GEOPULSE_SPATIAL_MATCHES_PATH`
 
-The deployment-specific command must upload only the indicated match partition, then replace or
-merge that logical batch transactionally. `sql/snowflake/02_spatial_matches.sql` remains a
-development full-refresh reference; its `TRUNCATE` workflow is not a batch-aware daily loader and
+GeoPulse's `geopulse-load-spatial` command implements this boundary with upload confirmation,
+audit-to-warehouse reconciliation, and transactional replacement of one local-day UTC interval.
+See `docs/warehouse-loading.md` for the worker command, provisioning, and a local dry run.
+An alternative command must provide the same batch guarantees. The older
+`sql/snowflake/02_spatial_matches.sql` remains a development full-refresh reference; its
+`TRUNCATE` workflow is not a batch-aware daily loader and
 must not be used unchanged for this task.
 
 The final dbt command uses `--exclude-resource-type seed`, ensuring the CI-only

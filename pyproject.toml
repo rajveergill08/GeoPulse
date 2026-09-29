@@ -24,6 +24,9 @@ analytics = [
   "dbt-duckdb==1.11.0",
   "dbt-snowflake==1.12.1",
 ]
+warehouse = [
+  "snowflake-connector-python==4.7.4",
+]
 orchestration = [
   "apache-airflow==3.3.2",
   "apache-airflow-providers-standard==1.19.0",
@@ -33,6 +36,7 @@ orchestration = [
 geopulse-generate = "geopulse.synthetic:main"
 geopulse-spatial-join = "geopulse.spatial:main"
 geopulse-validate-spatial = "geopulse.quality:main"
+geopulse-load-spatial = "geopulse.warehouse:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

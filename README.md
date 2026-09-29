@@ -19,6 +19,7 @@ The current implementation provides:
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
 - A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
+- A Snowflake batch publisher that validates staged rows and replaces one retail day atomically.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -117,8 +118,10 @@ python -m venv .venv-analytics
 ```
 
 The DAG's first task intentionally fails until `GEOPULSE_WAREHOUSE_LOAD_COMMAND` is configured
-with an idempotent deployment-specific loader. This prevents an expensive Spark run followed by
-dbt reading stale Snowflake data. The post-Sedona gate separately prevents empty, incomplete, or
+with a batch loader. GeoPulse provides `geopulse-load-spatial` for this boundary; it uploads only
+validated Parquet parts, reconciles warehouse counts, and replaces the logical retail day in one
+transaction. See `docs/warehouse-loading.md` for setup, a credential-free preview, and the worker
+command. The post-Sedona gate separately prevents empty, incomplete, or
 high-rejection batches from reaching that loader. See `docs/orchestration.md` for the task graph,
 quality policy, executable-path configuration, and recovery behavior.
 
