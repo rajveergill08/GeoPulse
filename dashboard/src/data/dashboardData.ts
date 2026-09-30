@@ -15,6 +15,15 @@ function isRate(value: unknown): value is number {
   return isFiniteNumber(value) && value >= 0 && value <= 1;
 }
 
+function isVisitorCount(value: unknown): value is number {
+  return isFiniteNumber(value) && Number.isSafeInteger(value) && value >= 0;
+}
+
+function matchesRoundedRate(actual: number, expected: number): boolean {
+  // The dbt mart rounds each rate to six decimal places before export.
+  return Math.abs(actual - expected) <= 0.000001 + Number.EPSILON;
+}
+
 function isStore(value: unknown): value is StoreMetric {
   if (!isRecord(value)) {
     return false;
@@ -53,20 +62,25 @@ function isFlow(value: unknown): value is CannibalizationFlow {
     ['morning_commute', 'midday', 'evening_commute', 'off_peak'].includes(
       String(value.daypart)
     ) &&
-    isFiniteNumber(existingVisitors) &&
+    isVisitorCount(existingVisitors) &&
     existingVisitors > 0 &&
-    isFiniteNumber(candidateVisitors) &&
+    isVisitorCount(candidateVisitors) &&
     candidateVisitors > 0 &&
-    isFiniteNumber(sharedVisitors) &&
-    sharedVisitors >= 0 &&
+    isVisitorCount(sharedVisitors) &&
     sharedVisitors <= existingVisitors &&
     sharedVisitors <= candidateVisitors &&
-    isFiniteNumber(incrementalVisitors) &&
+    isVisitorCount(incrementalVisitors) &&
     incrementalVisitors === candidateVisitors - sharedVisitors &&
     isRate(value.cannibalizationRate) &&
     isRate(value.candidateOverlapRate) &&
     isRate(value.candidateIncrementalReachRate) &&
-    Math.abs(value.candidateOverlapRate + value.candidateIncrementalReachRate - 1) < 0.000001
+    matchesRoundedRate(value.cannibalizationRate, sharedVisitors / existingVisitors) &&
+    matchesRoundedRate(value.candidateOverlapRate, sharedVisitors / candidateVisitors) &&
+    matchesRoundedRate(
+      value.candidateIncrementalReachRate,
+      incrementalVisitors / candidateVisitors
+    ) &&
+    matchesRoundedRate(value.candidateOverlapRate + value.candidateIncrementalReachRate, 1)
   );
 }
 

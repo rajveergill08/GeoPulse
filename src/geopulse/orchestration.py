@@ -104,6 +104,7 @@ class DailyPipelineConfig:
     data_root: Path
     stores_path: Path
     dbt_profiles_dir: Path
+    dashboard_snapshot_path: Path
     python_executable: str = "python"
     dbt_executable: str = "dbt"
     devices: int = 100_000
@@ -164,12 +165,20 @@ class DailyPipelineConfig:
             ),
             project_root,
         )
+        dashboard_snapshot_path = _resolve_path(
+            values.get(
+                "GEOPULSE_DASHBOARD_SNAPSHOT_PATH",
+                data_root / "output" / "dashboard" / "geopulse-dashboard.json",
+            ),
+            project_root,
+        )
 
         return cls(
             project_root=project_root,
             data_root=data_root,
             stores_path=stores_path,
             dbt_profiles_dir=profiles_dir,
+            dashboard_snapshot_path=dashboard_snapshot_path,
             python_executable=_read_non_empty(
                 values,
                 "GEOPULSE_PYTHON_BIN",
@@ -261,6 +270,7 @@ class DailyPipelineConfig:
             "GEOPULSE_MAX_REJECTED_STORE_ROWS": str(self.max_rejected_store_rows),
             "GEOPULSE_DBT_PROFILES_DIR": str(self.dbt_profiles_dir),
             "GEOPULSE_DBT_TARGET": self.dbt_target,
+            "GEOPULSE_DASHBOARD_SNAPSHOT_PATH": str(self.dashboard_snapshot_path),
         }
 
     @staticmethod
@@ -286,6 +296,16 @@ require_executable() {
 [ -w "$GEOPULSE_DATA_ROOT" ] || fail "GeoPulse data root is not writable." 73
 [ -r "$GEOPULSE_STORES_PATH" ] || fail "Store reference file is unreadable." 66
 [ -r "$GEOPULSE_DBT_PROFILES_DIR/profiles.yml" ] || fail "dbt profile is unreadable." 66
+[ -n "${GEOPULSE_DASHBOARD_SNAPSHOT_PATH:-}" ] || \
+  fail "Dashboard snapshot path is not configured." 64
+snapshot_parent="$(dirname "$GEOPULSE_DASHBOARD_SNAPSHOT_PATH")"
+while [ ! -e "$snapshot_parent" ]; do
+  snapshot_parent="$(dirname "$snapshot_parent")"
+done
+[ -d "$snapshot_parent" ] && [ -w "$snapshot_parent" ] || \
+  fail "Dashboard snapshot parent is not a writable directory." 73
+[ ! -d "$GEOPULSE_DASHBOARD_SNAPSHOT_PATH" ] || \
+  fail "Dashboard snapshot path is a directory." 73
 require_executable "$GEOPULSE_PYTHON_BIN"
 require_executable "$GEOPULSE_DBT_BIN"
 echo "GeoPulse runtime configuration validated."
@@ -362,5 +382,19 @@ bash -euo pipefail -c "$GEOPULSE_WAREHOUSE_LOAD_COMMAND"
                 '--target "$GEOPULSE_DBT_TARGET"',
                 "--fail-fast",
                 "--exclude-resource-type seed",
+            )
+        )
+
+    def dashboard_export_command(self) -> str:
+        """Export only aggregated mart metrics after dbt has finished successfully."""
+
+        return " ".join(
+            (
+                shlex.quote(self.python_executable),
+                "-m geopulse.dashboard_export",
+                '--run-date "$GEOPULSE_RUN_DATE"',
+                '--stores "$GEOPULSE_STORES_PATH"',
+                '--output "$GEOPULSE_DASHBOARD_SNAPSHOT_PATH"',
+                "--synthetic",
             )
         )

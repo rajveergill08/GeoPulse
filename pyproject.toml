@@ -37,6 +37,7 @@ geopulse-generate = "geopulse.synthetic:main"
 geopulse-spatial-join = "geopulse.spatial:main"
 geopulse-validate-spatial = "geopulse.quality:main"
 geopulse-load-spatial = "geopulse.warehouse:main"
+geopulse-export-dashboard = "geopulse.dashboard_export:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

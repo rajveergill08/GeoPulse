@@ -34,6 +34,10 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertEqual(config.data_root, self.project_root / "data")
         self.assertEqual(config.stores_path, self.project_root / "data/reference/stores.csv")
         self.assertEqual(config.dbt_profiles_dir, self.project_root / "profiles/snowflake")
+        self.assertEqual(
+            config.dashboard_snapshot_path,
+            self.project_root / "data/output/dashboard/geopulse-dashboard.json",
+        )
         self.assertEqual(config.dbt_target, "snowflake")
         self.assertEqual(config.expected_ping_rows, 9_600_000)
         self.assertEqual(config.max_ping_rejection_rate, 0.01)
@@ -47,6 +51,7 @@ class DailyPipelineConfigTests(unittest.TestCase):
                 "GEOPULSE_STORES_PATH": "config/stores.csv",
                 "GEOPULSE_DBT_PROFILES_DIR": "profiles/ci",
                 "GEOPULSE_DBT_TARGET": "ci",
+                "GEOPULSE_DASHBOARD_SNAPSHOT_PATH": "published/snapshot.json",
                 "GEOPULSE_DEVICES": "250",
                 "GEOPULSE_INTERVAL_MINUTES": "60",
                 "GEOPULSE_GENERATOR_SEED": "7",
@@ -60,6 +65,9 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertEqual(config.data_root, self.project_root / "shared-data")
         self.assertEqual(config.stores_path, self.project_root / "config/stores.csv")
         self.assertEqual(config.dbt_profiles_dir, self.project_root / "profiles/ci")
+        self.assertEqual(
+            config.dashboard_snapshot_path, self.project_root / "published/snapshot.json"
+        )
         self.assertEqual(config.devices, 250)
         self.assertEqual(config.interval_minutes, 60)
         self.assertEqual(config.generator_seed, 7)
@@ -114,6 +122,10 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertEqual(environment["GEOPULSE_EXPECTED_PING_ROWS"], "9600000")
         self.assertEqual(environment["GEOPULSE_MAX_PING_REJECTION_RATE"], "0.01")
         self.assertEqual(environment["GEOPULSE_MAX_REJECTED_STORE_ROWS"], "0")
+        self.assertEqual(
+            environment["GEOPULSE_DASHBOARD_SNAPSHOT_PATH"],
+            str(self.project_root / "data/output/dashboard/geopulse-dashboard.json"),
+        )
         self.assertNotIn("GEOPULSE_WAREHOUSE_LOAD_COMMAND", environment)
 
     def test_commands_preserve_pipeline_contract_and_retry_safety(self) -> None:
@@ -151,6 +163,13 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertIn('--target "$GEOPULSE_DBT_TARGET"', dbt_command)
         self.assertIn("--fail-fast", dbt_command)
         self.assertIn("--exclude-resource-type seed", dbt_command)
+
+        dashboard_command = config.dashboard_export_command()
+        self.assertIn("-m geopulse.dashboard_export", dashboard_command)
+        self.assertIn('--run-date "$GEOPULSE_RUN_DATE"', dashboard_command)
+        self.assertIn('--stores "$GEOPULSE_STORES_PATH"', dashboard_command)
+        self.assertIn('--output "$GEOPULSE_DASHBOARD_SNAPSHOT_PATH"', dashboard_command)
+        self.assertIn("--synthetic", dashboard_command)
 
     @unittest.skipUnless(
         os.name != "nt" and shutil.which("bash") is not None,
@@ -198,6 +217,20 @@ class DailyPipelineConfigTests(unittest.TestCase):
         )
         self.assertEqual(validated.returncode, 0, validated.stderr)
         self.assertIn("runtime configuration validated", validated.stdout)
+
+        blocked = self.project_root / "blocked"
+        blocked.write_text("not a directory", encoding="utf-8")
+        environment["GEOPULSE_DASHBOARD_SNAPSHOT_PATH"] = str(blocked / "snapshot.json")
+        invalid_snapshot = subprocess.run(
+            ["bash", "-c", config.runtime_validation_command()],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(invalid_snapshot.returncode, 73)
+        self.assertIn("snapshot parent", invalid_snapshot.stderr)
+        environment["GEOPULSE_DASHBOARD_SNAPSHOT_PATH"] = str(config.dashboard_snapshot_path)
 
         published = subprocess.run(
             ["bash", "-c", config.warehouse_load_wrapper_command()],

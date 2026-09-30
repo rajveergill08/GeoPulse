@@ -57,6 +57,7 @@ class AirflowDagTests(unittest.TestCase):
             "validate_spatial_quality",
             "load_spatial_matches",
             "build_dbt_analytics",
+            "export_dashboard_snapshot",
         )
 
         self.assertEqual(set(dag.task_ids), set(expected_chain))
@@ -72,6 +73,7 @@ class AirflowDagTests(unittest.TestCase):
         quality_task = dag.get_task("validate_spatial_quality")
         load_task = dag.get_task("load_spatial_matches")
         dbt_task = dag.get_task("build_dbt_analytics")
+        export_task = dag.get_task("export_dashboard_snapshot")
 
         self.assertIn("required before compute starts", validation_task.bash_command)
         self.assertTrue(validation_task.append_env)
@@ -86,6 +88,12 @@ class AirflowDagTests(unittest.TestCase):
         self.assertTrue(load_task.append_env)
         self.assertIn("dbt", dbt_task.bash_command)
         self.assertIn("--exclude-resource-type seed", dbt_task.bash_command)
+        self.assertIn("geopulse.dashboard_export", export_task.bash_command)
+        self.assertIn("GEOPULSE_DASHBOARD_SNAPSHOT_PATH", export_task.bash_command)
+        self.assertEqual(
+            export_task.env["GEOPULSE_DASHBOARD_SNAPSHOT_PATH"],
+            str(self.project_root / "data/output/dashboard/geopulse-dashboard.json"),
+        )
         self.assertTrue(all(task.do_xcom_push is False for task in dag.tasks))
 
     def test_logical_date_templates_render_to_one_stable_partition(self) -> None:
@@ -121,6 +129,10 @@ class AirflowDagTests(unittest.TestCase):
         self.assertEqual(
             rendered_environment["GEOPULSE_SPATIAL_MATCHES_PATH"],
             str(self.project_root / "data/output/spatial/20260926/matches"),
+        )
+        self.assertEqual(
+            rendered_environment["GEOPULSE_DASHBOARD_SNAPSHOT_PATH"],
+            str(self.project_root / "data/output/dashboard/geopulse-dashboard.json"),
         )
 
 

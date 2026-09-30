@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "source": "GEOPULSE.ANALYTICS.FCT_STORE_CANNIBALIZATION + data/reference/stores.csv",
+    "source": "GEOPULSE.ANALYTICS_MARTS.FCT_STORE_CANNIBALIZATION + data/reference/stores.csv",
     "refreshedAt": "2026-09-25T06:30:00Z",
     "timezone": "UTC",
     "retailTimezone": "Asia/Kolkata",

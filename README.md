@@ -20,6 +20,7 @@ The current implementation provides:
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
 - A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
 - A Snowflake batch publisher that validates staged rows and replaces one retail day atomically.
+- A read-only dashboard exporter that publishes validated aggregate mart results as an atomic JSON snapshot.
 - Data-contract documentation, unit tests, and GitHub Actions validation.
 
 ## Architecture roadmap
@@ -97,7 +98,8 @@ guardrails, and Snowflake execution instructions.
 The `geopulse_daily_pipeline` Airflow DAG runs at 02:00 Asia/Kolkata and processes the previous
 logical daily interval. It generates a date-partitioned mobility file, executes the Sedona join,
 reconciles the spatial audit, enforces rejection limits, verifies that partitioned Parquet matches
-exist, and only then permits warehouse publishing and the dbt mart build.
+exist, and only then permits warehouse publishing, the dbt mart build, and a read-only dashboard
+snapshot export.
 
 Airflow is supported on Linux; use WSL2 or a Linux container when developing on Windows. Install
 Airflow with its official constraints file. Keep Spark and dbt in separate worker environments so
@@ -112,7 +114,7 @@ python -m pip install --editable ".[orchestration]" \
   --constraint "$CONSTRAINT_URL"
 
 python -m venv .venv-spatial
-.venv-spatial/bin/python -m pip install --editable ".[spatial]"
+.venv-spatial/bin/python -m pip install --editable ".[spatial,warehouse]"
 python -m venv .venv-analytics
 .venv-analytics/bin/python -m pip install --editable ".[analytics]"
 ```
@@ -140,7 +142,9 @@ npm run dev
 Set `VITE_MAPBOX_ACCESS_TOKEN` in `.env.local` to enable the basemap. The KPI cards and scenario
 panel remain available without a token. Run `npm run lint`, `npm run test`, and `npm run build`
 before publishing a change. See `dashboard/README.md` for the response contract and production
-integration boundary.
+integration boundary. The scheduled exporter creates `data/output/dashboard/geopulse-dashboard.json`
+after dbt succeeds; a static host can serve that validated file without exposing Snowflake
+credentials. See `docs/dashboard-export.md` for the export and deployment contract.
 
 ## Load into Snowflake
 

@@ -1,8 +1,8 @@
 # Daily Airflow orchestration
 
 The Week 4 orchestration milestone coordinates the existing synthetic mobility, Apache Sedona,
-warehouse publishing, and dbt workloads. The DAG uses Airflow 3's public authoring interface and
-keeps credentials and network access out of DAG parsing.
+warehouse publishing, dbt, and dashboard export workloads. The DAG uses Airflow 3's public
+authoring interface and keeps credentials and network access out of DAG parsing.
 
 ## Task graph
 
@@ -13,6 +13,7 @@ validate_runtime_configuration
   -> validate_spatial_quality
   -> load_spatial_matches
   -> build_dbt_analytics
+  -> export_dashboard_snapshot
 ```
 
 The preflight task checks the loader command, executables, store reference, dbt profile, and data
@@ -51,7 +52,7 @@ python -m pip install --editable ".[orchestration]" --constraint "$CONSTRAINT_UR
 
 # Build task runtimes separately so Spark/dbt cannot replace constrained Airflow packages.
 python -m venv .venv-spatial
-.venv-spatial/bin/python -m pip install --editable ".[spatial]"
+.venv-spatial/bin/python -m pip install --editable ".[spatial,warehouse]"
 python -m venv .venv-analytics
 .venv-analytics/bin/python -m pip install --editable ".[analytics]"
 
@@ -97,6 +98,7 @@ runtime worker environment and is not embedded in the serialized DAG.
 | `GEOPULSE_DBT_PROFILES_DIR` | `<project>/profiles/snowflake` | Production dbt profile directory. |
 | `GEOPULSE_DBT_TARGET` | `snowflake` | dbt target name. |
 | `GEOPULSE_WAREHOUSE_LOAD_COMMAND` | No default | Required batch-aware Parquet publishing command. |
+| `GEOPULSE_DASHBOARD_SNAPSHOT_PATH` | `<data>/output/dashboard/geopulse-dashboard.json` | Atomic, aggregate-only JSON snapshot written after dbt succeeds. |
 
 Use a smaller value such as `GEOPULSE_DEVICES=1000` for a development run. Production workers
 also require Java 17, access to compatible Sedona Maven packages, Snowflake connectivity, and the
@@ -158,8 +160,13 @@ An alternative command must provide the same batch guarantees. The older
 `TRUNCATE` workflow is not a batch-aware daily loader and
 must not be used unchanged for this task.
 
-The final dbt command uses `--exclude-resource-type seed`, ensuring the CI-only
+The dbt command uses `--exclude-resource-type seed`, ensuring the CI-only
 `seeds/ping_store_matches.csv` fixture is never loaded into the production target.
+After dbt succeeds, `export_dashboard_snapshot` reads only the aggregate cannibalization mart
+for the same logical date and writes the dashboard JSON contract to the configured path. It
+does not read or publish device IDs. The file is not automatically hosted: mount or upload the
+completed snapshot to a protected static endpoint, then set the dashboard's
+`VITE_GEOPULSE_DATA_URL` to that URL. See `docs/dashboard-export.md`.
 
 For a dry-run of the preflight and loader tasks, the command may be set to
 `echo publish-boundary-validated`. That value proves task wiring only and must never be used for a
@@ -174,6 +181,8 @@ real scheduled run. Parsing the DAG does not require a loader command.
 - If warehouse publishing partially fails, clean or roll back that one batch using the loader's
   transaction rules, then retry `load_spatial_matches`. dbt remains blocked until publishing
   succeeds.
+- A failed dashboard export retains the last complete snapshot. Fix the mart, reference-store
+  file, or credentials and retry only `export_dashboard_snapshot`; do not copy a partial file.
 - Manual historical runs must use the intended logical date and a loader that can safely replace
   that batch. Automatic catchup stays disabled to prevent an accidental multi-day Spark surge.
 - Keep Snowflake passwords, keys, and tokens in the Airflow secret backend or protected worker

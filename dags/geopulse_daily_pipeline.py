@@ -95,6 +95,16 @@ with DAG(
         do_xcom_push=False,
     )
 
+    export_dashboard_snapshot = BashOperator(
+        task_id="export_dashboard_snapshot",
+        bash_command=CONFIG.dashboard_export_command(),
+        cwd=str(CONFIG.project_root),
+        env=TASK_ENVIRONMENT,
+        append_env=True,
+        execution_timeout=timedelta(minutes=30),
+        do_xcom_push=False,
+    )
+
     (
         validate_runtime_configuration
         >> generate_daily_pings
@@ -102,4 +112,5 @@ with DAG(
         >> validate_spatial_quality
         >> load_spatial_matches
         >> build_dbt_analytics
+        >> export_dashboard_snapshot
     )
