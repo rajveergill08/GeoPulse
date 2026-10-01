@@ -9,6 +9,7 @@ authoring interface and keeps credentials and network access out of DAG parsing.
 ```text
 validate_runtime_configuration
   -> generate_daily_pings
+  -> load_raw_mobile_pings
   -> run_sedona_spatial_join
   -> validate_spatial_quality
   -> load_spatial_matches
@@ -16,9 +17,10 @@ validate_runtime_configuration
   -> export_dashboard_snapshot
 ```
 
-The preflight task checks the loader command, executables, store reference, dbt profile, and data
-root before the 9.6-million-row default workload can start. The spatial quality task then checks
-the completed daily output before any warehouse state can change.
+The preflight task checks the spatial loader command, executables, store reference, dbt profile,
+and data root before the 9.6-million-row default workload can start. The raw publisher validates
+the generated CSV and publishes native GEOGRAPHY points before Sedona begins. The spatial quality
+task then checks the completed join before matched rows can reach Snowflake.
 
 `geopulse_daily_pipeline` runs at 02:00 in `Asia/Kolkata`, does not create historical runs
 automatically (`catchup=False`), and permits only one active run. Each task retries twice after a
@@ -34,9 +36,11 @@ data/output/spatial/20260926/audit/
 data/output/spatial/20260926/matches/
 ```
 
-Generation replaces its date-specific file and Sedona uses `--write-mode overwrite`. Those
-behaviors make the compute tasks safe to retry without appending duplicate files. The warehouse
-loader must provide the same idempotency guarantee for its batch.
+Generation replaces its date-specific file and Sedona uses `--write-mode overwrite`. The raw
+and spatial publishers each replace only the target retail day in a separate transaction. A
+failed later task may leave raw pings present without updated spatial marts; retry the same
+logical run after fixing the failure. The two Snowflake targets are not updated in one
+cross-table transaction.
 
 ## Install and validate
 
@@ -69,9 +73,9 @@ airflow dags list
 ```
 
 The parse test validates the schedule, timezone, task set, and exact dependency chain without
-executing Spark, Snowflake, or dbt. Their execution paths remain covered by the separate spatial
-and dbt CI jobs. The SQLite metadata database created by `airflow db migrate` is suitable for this
-local listing only, not for production.
+executing Spark, Snowflake, or dbt. Their execution paths remain covered by the Python, spatial,
+and dbt CI jobs. The SQLite metadata database created by `airflow db migrate` is suitable for
+this local listing only, not for production.
 
 ## Runtime configuration
 
@@ -103,6 +107,17 @@ runtime worker environment and is not embedded in the serialized DAG.
 Use a smaller value such as `GEOPULSE_DEVICES=1000` for a development run. Production workers
 also require Java 17, access to compatible Sedona Maven packages, Snowflake connectivity, and the
 environment variables referenced by `profiles/snowflake/profiles.yml`.
+
+## Raw GEOGRAPHY boundary
+
+`load_raw_mobile_pings` runs `geopulse-load-raw` after the generator succeeds. It receives the
+same rendered logical date and ping path as Sedona, plus the expected device and row counts.
+The publisher streams local validation, loads into isolated Snowflake temporary objects, and
+transactionally replaces only that retail day's rows in `GEOPULSE.RAW.MOBILE_PINGS`. It fails
+closed if the CSV or typed warehouse rows are inconsistent. This task uses the Python worker
+with `.[spatial,warehouse]`; provision `sql/snowflake/04_raw_batch_setup.sql` first. See
+`docs/raw-warehouse-loading.md` for the dry run, grants, and retry details. The legacy
+`sql/snowflake/01_raw_mobility.sql` is not the scheduled ingestion path.
 
 ## Spatial quality boundary
 
@@ -178,6 +193,9 @@ real scheduled run. Parsing the DAG does not require a loader command.
   worker path is not automatically visible to another machine.
 - Re-run a failed task or the same logical DAG run; do not create a new wall-clock partition. The
   generator and Sedona tasks overwrite only that run's dated paths.
+- If raw publication fails, retry `load_raw_mobile_pings` after inspecting the file and target;
+  Sedona remains blocked. If raw succeeds but a later task fails, retain the valid raw day and
+  retry downstream tasks or the same logical run.
 - If warehouse publishing partially fails, clean or roll back that one batch using the loader's
   transaction rules, then retry `load_spatial_matches`. dbt remains blocked until publishing
   succeeds.

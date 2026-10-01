@@ -13,6 +13,7 @@ The current implementation provides:
 - Weekday commuter and weekend retail movement patterns around Bengaluru.
 - CSV and compressed CSV output suitable for large development datasets.
 - Snowflake DDL and loading SQL using native `GEOGRAPHY` points.
+- A retry-safe daily CSV publisher that validates raw pings and builds native Snowflake `GEOGRAPHY` points.
 - A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
@@ -96,7 +97,8 @@ guardrails, and Snowflake execution instructions.
 ## Orchestrate daily updates
 
 The `geopulse_daily_pipeline` Airflow DAG runs at 02:00 Asia/Kolkata and processes the previous
-logical daily interval. It generates a date-partitioned mobility file, executes the Sedona join,
+logical daily interval. It generates a date-partitioned mobility file, publishes the raw GPS
+batch to Snowflake, executes the Sedona join,
 reconciles the spatial audit, enforces rejection limits, verifies that partitioned Parquet matches
 exist, and only then permits warehouse publishing, the dbt mart build, and a read-only dashboard
 snapshot export.
@@ -125,7 +127,9 @@ validated Parquet parts, reconciles warehouse counts, and replaces the logical r
 transaction. See `docs/warehouse-loading.md` for setup, a credential-free preview, and the worker
 command. The post-Sedona gate separately prevents empty, incomplete, or
 high-rejection batches from reaching that loader. See `docs/orchestration.md` for the task graph,
-quality policy, executable-path configuration, and recovery behavior.
+quality policy, executable-path configuration, and recovery behavior. The earlier raw publisher
+uses `geopulse-load-raw`; see `docs/raw-warehouse-loading.md` for its separate GEOGRAPHY target
+and retry rules.
 
 ## Run the mobility dashboard
 
@@ -148,13 +152,12 @@ credentials. See `docs/dashboard-export.md` for the export and deployment contra
 
 ## Load into Snowflake
 
-1. Generate `data/generated/mobile_pings.csv.gz`.
-2. Run `sql/snowflake/01_raw_mobility.sql` with a role allowed to create the GeoPulse objects.
-3. Use the `PUT` example in that file to upload the generated data to the internal stage.
-4. Run the `COPY`, typed insert, and validation statements.
-
-The loader retains malformed staging rows in a rejected-record view and converts valid
-longitude/latitude pairs using `ST_MAKEPOINT(longitude, latitude)`.
+Run `sql/snowflake/04_raw_batch_setup.sql` once with a provisioning role, then use
+`geopulse-load-raw` for a date-specific CSV.GZ batch. Its credential-free `--dry-run` validates
+the file before publishing. The publisher converts validated longitude/latitude pairs using
+`ST_MAKEPOINT(longitude, latitude)` and replaces only the logical retail day. The older
+`01_raw_mobility.sql` is a manual full-refresh reference, not the daily job. See
+`docs/raw-warehouse-loading.md` for the exact command, access requirements, and limitations.
 
 ## Privacy
 

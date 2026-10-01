@@ -23,7 +23,7 @@ jobs:
       - name: Compile source and DAGs
         run: python -m compileall -q src dags
 
-      - name: Install warehouse and dashboard publisher
+      - name: Install Snowflake publishers
         run: python -m pip install --editable ".[warehouse]"
 
       - name: Run unit tests
@@ -31,6 +31,9 @@ jobs:
 
       - name: Validate warehouse command installation
         run: geopulse-load-spatial --help
+
+      - name: Validate raw geography command installation
+        run: geopulse-load-raw --help
 
       - name: Validate dashboard export command installation
         run: geopulse-export-dashboard --help

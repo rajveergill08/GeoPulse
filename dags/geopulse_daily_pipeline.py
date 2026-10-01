@@ -26,7 +26,7 @@ DEFAULT_ARGS = {
 
 with DAG(
     dag_id="geopulse_daily_pipeline",
-    description="Generate mobility pings, run Sedona, publish matches, and build dbt marts.",
+    description="Generate pings, publish raw geography, run Sedona, and build analytics.",
     schedule=CronDataIntervalTimetable("0 2 * * *", timezone=PIPELINE_TIMEZONE),
     start_date=pendulum.datetime(2026, 9, 26, 2, 0, tz=PIPELINE_TIMEZONE),
     catchup=False,
@@ -52,6 +52,16 @@ with DAG(
         env=TASK_ENVIRONMENT,
         append_env=True,
         execution_timeout=timedelta(hours=3),
+        do_xcom_push=False,
+    )
+
+    load_raw_mobile_pings = BashOperator(
+        task_id="load_raw_mobile_pings",
+        bash_command=CONFIG.raw_load_command(),
+        cwd=str(CONFIG.project_root),
+        env=TASK_ENVIRONMENT,
+        append_env=True,
+        execution_timeout=timedelta(hours=2),
         do_xcom_push=False,
     )
 
@@ -108,6 +118,7 @@ with DAG(
     (
         validate_runtime_configuration
         >> generate_daily_pings
+        >> load_raw_mobile_pings
         >> run_sedona_spatial_join
         >> validate_spatial_quality
         >> load_spatial_matches

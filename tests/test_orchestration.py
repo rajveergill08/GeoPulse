@@ -120,6 +120,7 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertTrue(environment["GEOPULSE_SPATIAL_AUDIT_PATH"].endswith("audit"))
         self.assertTrue(environment["GEOPULSE_SPATIAL_MATCHES_PATH"].endswith("matches"))
         self.assertEqual(environment["GEOPULSE_EXPECTED_PING_ROWS"], "9600000")
+        self.assertEqual(environment["GEOPULSE_DEVICES"], "100000")
         self.assertEqual(environment["GEOPULSE_MAX_PING_REJECTION_RATE"], "0.01")
         self.assertEqual(environment["GEOPULSE_MAX_REJECTED_STORE_ROWS"], "0")
         self.assertEqual(
@@ -142,6 +143,13 @@ class DailyPipelineConfigTests(unittest.TestCase):
         self.assertIn('--pings "$GEOPULSE_PINGS_PATH"', spatial_command)
         self.assertIn('--output "$GEOPULSE_SPATIAL_OUTPUT"', spatial_command)
         self.assertIn("--write-mode overwrite", spatial_command)
+
+        raw_command = config.raw_load_command()
+        self.assertIn("-m geopulse.raw_warehouse", raw_command)
+        self.assertIn('--run-date "$GEOPULSE_RUN_DATE"', raw_command)
+        self.assertIn('--pings "$GEOPULSE_PINGS_PATH"', raw_command)
+        self.assertIn('--expected-ping-rows "$GEOPULSE_EXPECTED_PING_ROWS"', raw_command)
+        self.assertIn('--expected-devices "$GEOPULSE_DEVICES"', raw_command)
 
         quality_command = config.spatial_quality_command()
         self.assertIn("-m geopulse.quality", quality_command)

@@ -266,6 +266,7 @@ class DailyPipelineConfig:
                 "matches",
             ),
             "GEOPULSE_EXPECTED_PING_ROWS": str(self.expected_ping_rows),
+            "GEOPULSE_DEVICES": str(self.devices),
             "GEOPULSE_MAX_PING_REJECTION_RATE": str(self.max_ping_rejection_rate),
             "GEOPULSE_MAX_REJECTED_STORE_ROWS": str(self.max_rejected_store_rows),
             "GEOPULSE_DBT_PROFILES_DIR": str(self.dbt_profiles_dir),
@@ -341,6 +342,20 @@ echo "GeoPulse runtime configuration validated."
                 f"--master {shlex.quote(self.spark_master)}",
                 f"--shuffle-partitions {self.shuffle_partitions}",
                 "--write-mode overwrite",
+            )
+        )
+
+    def raw_load_command(self) -> str:
+        """Publish the generated source pings before distributed spatial processing."""
+
+        return " ".join(
+            (
+                shlex.quote(self.python_executable),
+                "-m geopulse.raw_warehouse",
+                '--run-date "$GEOPULSE_RUN_DATE"',
+                '--pings "$GEOPULSE_PINGS_PATH"',
+                '--expected-ping-rows "$GEOPULSE_EXPECTED_PING_ROWS"',
+                '--expected-devices "$GEOPULSE_DEVICES"',
             )
         )
 

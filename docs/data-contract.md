@@ -34,11 +34,14 @@ The natural key for development purposes is `(device_id, event_ts)`.
 This dataset is synthetic and safe for development demonstrations. The hash scheme is not a
 replacement for a production privacy program. Real mobility data must use a secret managed salt,
 documented retention limits, aggregation thresholds, access controls, and legal/privacy review.
-Raw identifiers must never enter the analytics warehouse.
+Raw identifiers must remain in the restricted RAW layer; analytics marts and dashboard
+snapshots must contain aggregates only.
 
 ## Snowflake mapping
 
-The raw CSV lands in `GEOPULSE.RAW.MOBILE_PINGS_STAGE`. Valid rows are converted into
-`GEOPULSE.RAW.MOBILE_PINGS`, where `ST_MAKEPOINT(longitude, latitude)` creates the native
-`GEOGRAPHY` value. Invalid timestamps and out-of-range coordinates remain queryable through
-`GEOPULSE.RAW.REJECTED_MOBILE_PINGS`.
+The daily publisher loads one validated CSV through a session-temporary Snowflake landing table
+into `GEOPULSE.RAW.MOBILE_PINGS`, where `ST_MAKEPOINT(longitude, latitude)` creates the native
+`GEOGRAPHY` value. Malformed rows fail the batch before permanent rows change; the daily job
+does not populate the legacy `MOBILE_PINGS_STAGE` table or `REJECTED_MOBILE_PINGS` view in the
+manual `01_raw_mobility.sql` example. See `docs/raw-warehouse-loading.md` for the new batch
+contract and retry behavior.

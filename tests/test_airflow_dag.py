@@ -53,6 +53,7 @@ class AirflowDagTests(unittest.TestCase):
         expected_chain = (
             "validate_runtime_configuration",
             "generate_daily_pings",
+            "load_raw_mobile_pings",
             "run_sedona_spatial_join",
             "validate_spatial_quality",
             "load_spatial_matches",
@@ -69,6 +70,7 @@ class AirflowDagTests(unittest.TestCase):
         dag = self.dag_bag.dags["geopulse_daily_pipeline"]
         validation_task = dag.get_task("validate_runtime_configuration")
         generate_task = dag.get_task("generate_daily_pings")
+        raw_task = dag.get_task("load_raw_mobile_pings")
         spatial_task = dag.get_task("run_sedona_spatial_join")
         quality_task = dag.get_task("validate_spatial_quality")
         load_task = dag.get_task("load_spatial_matches")
@@ -78,6 +80,9 @@ class AirflowDagTests(unittest.TestCase):
         self.assertIn("required before compute starts", validation_task.bash_command)
         self.assertTrue(validation_task.append_env)
         self.assertIn("data_interval_start", generate_task.env["GEOPULSE_RUN_DATE"])
+        self.assertIn("geopulse.raw_warehouse", raw_task.bash_command)
+        self.assertIn("GEOPULSE_EXPECTED_PING_ROWS", raw_task.bash_command)
+        self.assertEqual(raw_task.env["GEOPULSE_DEVICES"], "100000")
         self.assertIn("data_interval_start", spatial_task.env["GEOPULSE_SPATIAL_OUTPUT"])
         self.assertIn("geopulse.quality", quality_task.bash_command)
         self.assertIn("GEOPULSE_SPATIAL_AUDIT_PATH", quality_task.bash_command)
