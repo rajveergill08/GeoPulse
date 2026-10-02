@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "source": "GEOPULSE.ANALYTICS_MARTS.FCT_STORE_CANNIBALIZATION + data/reference/stores.csv",
+    "source": "Synthetic dbt CI example + data/reference/stores.csv",
     "refreshedAt": "2026-09-25T06:30:00Z",
     "timezone": "UTC",
     "retailTimezone": "Asia/Kolkata",
@@ -38,6 +38,29 @@
       "cannibalizationRate": 0.3,
       "candidateOverlapRate": 0.75,
       "candidateIncrementalReachRate": 0.25
+    }
+  ],
+  "hourlyFootfall": [
+    {
+      "storeId": "store_a",
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 10,
+      "pingCount": 11
+    },
+    {
+      "storeId": "store_b",
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 4,
+      "pingCount": 4
+    },
+    {
+      "storeId": "store_a",
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 18,
+      "uniqueVisitors": 3,
+      "pingCount": 3
     }
   ]
 }

@@ -1,11 +1,12 @@
 import {lazy, Suspense, useEffect, useState} from 'react';
 
 import {DashboardHeader} from './components/DashboardHeader';
+import {FootfallTimeline} from './components/FootfallTimeline';
 import {KpiStrip} from './components/KpiStrip';
 import {MobilityMapUnavailable} from './components/MobilityMapUnavailable';
 import {ScenarioPanel} from './components/ScenarioPanel';
 import {loadDashboardSnapshot} from './data/dashboardData';
-import type {DashboardSnapshot} from './data/types';
+import type {CannibalizationFlow, DashboardSnapshot, Daypart} from './data/types';
 
 const MobilityMapBoundary = lazy(() =>
   import('./components/MobilityMapBoundary').then((module) => ({
@@ -14,9 +15,37 @@ const MobilityMapBoundary = lazy(() =>
 );
 const hasMapboxToken = Boolean(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim());
 
+function isHourInDaypart(hour: number, daypart: Daypart): boolean {
+  switch (daypart) {
+    case 'morning_commute':
+      return hour >= 5 && hour <= 9;
+    case 'midday':
+      return hour >= 10 && hour <= 15;
+    case 'evening_commute':
+      return hour >= 16 && hour <= 19;
+    case 'off_peak':
+      return hour < 5 || hour >= 20;
+  }
+}
+
+function initialHourForScenario(snapshot: DashboardSnapshot, flow: CannibalizationFlow): number {
+  const selectedStores = new Set([flow.existingStoreId, flow.candidateStoreId]);
+  const reportedHours = new Set<number>();
+
+  for (const row of snapshot.hourlyFootfall) {
+    if (row.trafficDateLocal === flow.trafficDateLocal && selectedStores.has(row.storeId)) {
+      reportedHours.add(row.hourLocal);
+    }
+  }
+
+  const sortedHours = [...reportedHours].sort((left, right) => left - right);
+  return sortedHours.find((hour) => isHourInDaypart(hour, flow.daypart)) ?? sortedHours[0] ?? 0;
+}
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  const [hourSelection, setHourSelection] = useState<{scenarioId: string; hour: number} | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,24 +92,45 @@ export default function App() {
 
   const selectedFlow =
     snapshot.flows.find((flow) => flow.scenarioId === selectedScenarioId) ?? snapshot.flows[0];
+  const selectedHour =
+    hourSelection?.scenarioId === selectedFlow.scenarioId
+      ? hourSelection.hour
+      : initialHourForScenario(snapshot, selectedFlow);
 
   return (
     <div className="dashboard-shell">
       <DashboardHeader metadata={snapshot.metadata} />
       <main className="dashboard-main">
         <KpiStrip flow={selectedFlow} />
+        <FootfallTimeline
+          snapshot={snapshot}
+          flow={selectedFlow}
+          selectedHour={selectedHour}
+          onHourChange={(hour) => setHourSelection({scenarioId: selectedFlow.scenarioId, hour})}
+        />
         <div className="dashboard-grid">
           <ScenarioPanel
             snapshot={snapshot}
             selectedFlow={selectedFlow}
-            onScenarioChange={setSelectedScenarioId}
+            onScenarioChange={(scenarioId) => {
+              setSelectedScenarioId(scenarioId);
+              setHourSelection(null);
+            }}
           />
           {hasMapboxToken ? (
             <Suspense fallback={<div className="map-loading">Loading geospatial renderer…</div>}>
-              <MobilityMapBoundary snapshot={snapshot} flow={selectedFlow} />
+              <MobilityMapBoundary
+                snapshot={snapshot}
+                flow={selectedFlow}
+                selectedHour={selectedHour}
+              />
             </Suspense>
           ) : (
-            <MobilityMapUnavailable snapshot={snapshot} flow={selectedFlow} />
+            <MobilityMapUnavailable
+              snapshot={snapshot}
+              flow={selectedFlow}
+              selectedHour={selectedHour}
+            />
           )}
         </div>
       </main>

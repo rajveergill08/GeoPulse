@@ -34,8 +34,17 @@ export interface CannibalizationFlow {
   candidateIncrementalReachRate: number;
 }
 
+export interface HourlyFootfall {
+  storeId: string;
+  trafficDateLocal: string;
+  hourLocal: number;
+  uniqueVisitors: number;
+  pingCount: number;
+}
+
 export interface DashboardSnapshot {
   metadata: DashboardMetadata;
   stores: StoreMetric[];
   flows: CannibalizationFlow[];
+  hourlyFootfall: HourlyFootfall[];
 }

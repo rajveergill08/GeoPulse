@@ -177,11 +177,11 @@ must not be used unchanged for this task.
 
 The dbt command uses `--exclude-resource-type seed`, ensuring the CI-only
 `seeds/ping_store_matches.csv` fixture is never loaded into the production target.
-After dbt succeeds, `export_dashboard_snapshot` reads only the aggregate cannibalization mart
-for the same logical date and writes the dashboard JSON contract to the configured path. It
-does not read or publish device IDs. The file is not automatically hosted: mount or upload the
-completed snapshot to a protected static endpoint, then set the dashboard's
-`VITE_GEOPULSE_DATA_URL` to that URL. See `docs/dashboard-export.md`.
+After dbt succeeds, `export_dashboard_snapshot` reads only the aggregate cannibalization and
+hourly-footfall marts for the same logical date and writes the synthetic dashboard JSON contract
+to the configured path. It does not read or publish device IDs. The file is not automatically
+hosted: mount or upload the completed snapshot to a protected static endpoint, then set the
+dashboard's `VITE_GEOPULSE_DATA_URL` to that URL. See `docs/dashboard-export.md`.
 
 For a dry-run of the preflight and loader tasks, the command may be set to
 `echo publish-boundary-validated`. That value proves task wiring only and must never be used for a

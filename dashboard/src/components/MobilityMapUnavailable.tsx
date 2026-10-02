@@ -6,18 +6,31 @@ import {MobilityMapHeader} from './MobilityMapHeader';
 interface MobilityMapUnavailableProps {
   snapshot: DashboardSnapshot;
   flow: CannibalizationFlow;
+  selectedHour: number;
 }
 
-export function MobilityMapUnavailable({snapshot, flow}: MobilityMapUnavailableProps) {
+export function MobilityMapUnavailable({
+  snapshot,
+  flow,
+  selectedHour
+}: MobilityMapUnavailableProps) {
   const existingStore = findStore(snapshot, flow.existingStoreId);
   const candidateStore = findStore(snapshot, flow.candidateStoreId);
+  const reportedStores = [flow.existingStoreId, flow.candidateStoreId].filter((storeId) =>
+    snapshot.hourlyFootfall.some(
+      (row) =>
+        row.storeId === storeId &&
+        row.trafficDateLocal === flow.trafficDateLocal &&
+        row.hourLocal === selectedHour
+    )
+  ).length;
 
   return (
     <section className="map-card" aria-labelledby="map-heading">
       <MobilityMapHeader />
       <div className="map-viewport map-preview">
         <svg
-          className="map-preview__route"
+          className="map-preview__link"
           viewBox="0 0 900 520"
           preserveAspectRatio="none"
           aria-hidden="true"
@@ -28,7 +41,7 @@ export function MobilityMapUnavailable({snapshot, flow}: MobilityMapUnavailableP
               <stop offset="1" stopColor="#f8b864" />
             </linearGradient>
           </defs>
-          <path d="M230 335 C390 70 610 85 720 265" />
+          <path d="M230 335 L720 265" />
           <circle cx="230" cy="335" r="16" className="preview-node preview-node--existing" />
           <circle cx="720" cy="265" r="16" className="preview-node preview-node--candidate" />
         </svg>
@@ -43,8 +56,13 @@ export function MobilityMapUnavailable({snapshot, flow}: MobilityMapUnavailableP
         </div>
         <div className="map-preview__risk">
           <strong>{formatPercent(flow.cannibalizationRate)}</strong>
-          <span>traffic at risk</span>
+          <span>daypart traffic at risk</span>
         </div>
+
+        <p className="map-preview__hour-note" role="status">
+          {String(selectedHour).padStart(2, '0')}:00 · Hourly data reported for {reportedStores} of 2
+          selected stores
+        </p>
 
         <div className="map-token-notice" role="status">
           Add <code>VITE_MAPBOX_ACCESS_TOKEN</code> locally to activate the interactive Kepler.gl

@@ -49,6 +49,14 @@ MART_COLUMNS = (
     "candidate_overlap_rate",
     "candidate_incremental_reach_rate",
 )
+HOURLY_COLUMNS = (
+    "store_id",
+    "traffic_date_local",
+    "event_hour_local",
+    "retail_timezone",
+    "unique_visitors",
+    "ping_count",
+)
 DAYPARTS = frozenset({"morning_commute", "midday", "evening_commute", "off_peak"})
 RATE_TOLERANCE = Decimal("0.000001")  # dbt rounds rates to six decimal places.
 MAX_SAFE_JS_INTEGER = 2**53 - 1
@@ -110,6 +118,10 @@ class DashboardExportConfig:
     @property
     def mart_table(self) -> str:
         return f"{self.database}.{self.mart_schema}.FCT_STORE_CANNIBALIZATION"
+
+    @property
+    def hourly_mart_table(self) -> str:
+        return f"{self.database}.{self.mart_schema}.FCT_STORE_HOURLY_FOOTFALL"
 
 
 def _decimal(value: object, field: str) -> Decimal:
@@ -219,6 +231,24 @@ def fetch_aggregate_rows(connection: Any, config: DashboardExportConfig) -> list
         return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
 
 
+def fetch_hourly_rows(connection: Any, config: DashboardExportConfig) -> list[dict[str, Any]]:
+    """Select only store/hour counts for the requested retail-local day."""
+
+    sql = (
+        f"SELECT {', '.join(HOURLY_COLUMNS)} FROM {config.hourly_mart_table} "
+        "WHERE TRAFFIC_DATE_LOCAL = TO_DATE(%s) "
+        "ORDER BY STORE_ID, TRAFFIC_DATE_LOCAL, EVENT_HOUR_LOCAL"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(sql, (config.run_date.isoformat(),))
+        names = tuple(column[0].lower() for column in cursor.description)
+        if names != HOURLY_COLUMNS:
+            raise DashboardExportError(
+                "Snowflake hourly mart returned unexpected aggregate columns"
+            )
+        return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+
+
 def _count(value: object, field: str, *, positive: bool = False) -> int:
     number = _decimal(value, field)
     if (
@@ -250,11 +280,64 @@ def _as_date(value: object) -> date:
     raise DashboardExportError("The mart returned an invalid local date")
 
 
+def _build_hourly_footfall(
+    config: DashboardExportConfig,
+    store_index: Mapping[str, dict[str, Any]],
+    rows: Sequence[dict[str, Any]],
+    flow_store_ids: set[str],
+) -> list[dict[str, Any]]:
+    if not rows:
+        raise DashboardExportError("No hourly footfall exists for the requested retail day")
+    hourly_footfall: list[dict[str, Any]] = []
+    grains: set[tuple[str, int]] = set()
+    covered_stores: set[str] = set()
+    for row in rows:
+        store_id = row["store_id"]
+        traffic_date = _as_date(row["traffic_date_local"])
+        hour = row["event_hour_local"]
+        if not isinstance(store_id, str) or store_id not in store_index:
+            raise DashboardExportError("The hourly mart references an unknown store")
+        if traffic_date != config.run_date:
+            raise DashboardExportError("The hourly mart returned a different retail date")
+        if row["retail_timezone"] != config.retail_timezone:
+            raise DashboardExportError(
+                "The hourly mart retail timezone differs from the configured one"
+            )
+        if isinstance(hour, bool) or not isinstance(hour, int) or not 0 <= hour <= 23:
+            raise DashboardExportError("The hourly mart returned an invalid local hour")
+        grain = (store_id, hour)
+        if grain in grains:
+            raise DashboardExportError("The hourly mart contains duplicate store/hour rows")
+        grains.add(grain)
+        unique_visitors = _count(row["unique_visitors"], "hourly unique visitors")
+        ping_count = _count(row["ping_count"], "hourly ping count")
+        if unique_visitors > ping_count:
+            raise DashboardExportError("The hourly mart visitor count exceeds the ping count")
+        covered_stores.add(store_id)
+        hourly_footfall.append(
+            {
+                "storeId": store_id,
+                "trafficDateLocal": traffic_date.isoformat(),
+                "hourLocal": hour,
+                "uniqueVisitors": unique_visitors,
+                "pingCount": ping_count,
+            }
+        )
+    missing = flow_store_ids - covered_stores
+    if missing:
+        raise DashboardExportError("Hourly footfall is missing for a flow-referenced store")
+    return sorted(
+        hourly_footfall,
+        key=lambda row: (row["trafficDateLocal"], row["storeId"], row["hourLocal"]),
+    )
+
+
 def build_snapshot(
     config: DashboardExportConfig,
     stores: Sequence[dict[str, Any]],
     rows: Sequence[dict[str, Any]],
     *,
+    hourly_rows: Sequence[dict[str, Any]] | None = None,
     exported_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Map Snowflake decimals/dates to the exact React JSON contract."""
@@ -334,13 +417,28 @@ def build_snapshot(
                 "candidateIncrementalReachRate": float(reach),
             }
         )
+    flow_store_ids = {
+        store_id
+        for flow in flows
+        for store_id in (flow["existingStoreId"], flow["candidateStoreId"])
+    }
+    hourly_footfall = (
+        []
+        if hourly_rows is None
+        else _build_hourly_footfall(config, store_index, hourly_rows, flow_store_ids)
+    )
     moment = exported_at or datetime.now(UTC)
     if moment.tzinfo is None:
         raise DashboardExportError("Snapshot generation time must include a timezone")
     refreshed_at = moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     return {
         "metadata": {
-            "source": f"Snowflake {config.mart_table} + store reference CSV",
+            "source": (
+                f"Snowflake {config.mart_table} + store reference CSV"
+                if hourly_rows is None
+                else f"Snowflake {config.mart_table} + {config.hourly_mart_table}"
+                " + store reference CSV"
+            ),
             "refreshedAt": refreshed_at,
             "timezone": "UTC",
             "retailTimezone": config.retail_timezone,
@@ -356,6 +454,7 @@ def build_snapshot(
                 flow["daypart"],
             ),
         ),
+        "hourlyFootfall": hourly_footfall,
     }
 
 
@@ -409,11 +508,17 @@ def main(argv: Iterable[str] | None = None) -> int:
             retail_timezone=os.environ.get("GEOPULSE_RETAIL_TIMEZONE", PIPELINE_TIMEZONE),
             synthetic=args.synthetic,
         )
+        if not config.synthetic:
+            raise DashboardExportError(
+                "Dashboard export is synthetic-only until real mobility aggregates have an "
+                "approved privacy and small-cell suppression policy"
+            )
         stores = read_stores(config.stores_path)
         settings = read_dashboard_connection_settings(os.environ, config)
         connection = connect_snowflake(settings)
         rows = fetch_aggregate_rows(connection, config)
-        snapshot = build_snapshot(config, stores, rows)
+        hourly_rows = fetch_hourly_rows(connection, config)
+        snapshot = build_snapshot(config, stores, rows, hourly_rows=hourly_rows)
         write_snapshot_atomically(config.output_path, snapshot)
         print(
             json.dumps(
@@ -422,6 +527,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     "run_date_local": config.run_date.isoformat(),
                     "target": str(config.output_path),
                     "flow_count": len(snapshot["flows"]),
+                    "hourly_footfall_count": len(snapshot["hourlyFootfall"]),
                     "synthetic": config.synthetic,
                 },
                 sort_keys=True,

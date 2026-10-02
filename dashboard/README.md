@@ -2,7 +2,8 @@
 
 This React dashboard turns the aggregated GeoPulse cannibalization mart into a location-decision
 view for retail real-estate teams. It presents traffic at risk, shared visitors, candidate overlap,
-incremental reach, store catchments, and an origin-to-destination mobility arc.
+incremental reach, and retail-local hourly footfall. The map's store-pair link depicts the
+comparison relationship, not an observed commuter route.
 
 ## Run locally
 
@@ -26,17 +27,21 @@ The dashboard deliberately does not accept Snowflake credentials. GeoPulse's sch
 the same validated JSON contract to `data/output/dashboard/geopulse-dashboard.json`. A static
 host can serve that file (or a copied object) at the URL configured by
 `VITE_GEOPULSE_DATA_URL`. Do not make Snowflake credentials or the raw ping tables available in
-the browser. See `docs/dashboard-export.md` for the publisher and recovery contract.
+the browser. The current exporter is synthetic-only; real mobility publication remains blocked
+until a reviewed privacy policy exists. See `docs/dashboard-export.md` for the publisher and
+recovery contract.
 
 ## Dashboard response contract
 
 The endpoint returns one snapshot with:
 
-- `metadata`: source relation, UTC refresh timestamp, retail timezone, and synthetic-data flag.
+- `metadata`: source description, UTC refresh timestamp, retail timezone, and synthetic-data flag.
 - `stores`: store identity, status, coordinates, and catchment radius.
 - `flows`: a retail-local date/daypart comparison between an existing and candidate store,
   including unique visitors, shared visitors, incremental visitors, and three rates expressed
   from 0 to 1.
+- `hourlyFootfall`: reported store-hour observations with local hour (0–23), distinct visitors
+  in that hour, and ping count. Missing store-hours are not silently treated as zero.
 
 Every flow must reference stores in the same response. Visitor counts must be non-negative,
 JavaScript-safe integers; shared visitors cannot exceed either store's visitors, and incremental
@@ -45,8 +50,12 @@ visitor counts to the dbt mart's six-decimal precision, and candidate overlap pl
 reach must equal 100% within that tolerance. The client rejects a snapshot that breaks these
 rules instead of displaying misleading metrics.
 
-`trafficDateLocal` and all displayed dayparts use `metadata.retailTimezone`; `refreshedAt` remains
-an ISO-8601 UTC timestamp for freshness checks.
+`trafficDateLocal`, the 24-hour scrubber, and all displayed dayparts use
+`metadata.retailTimezone`; `refreshedAt` remains an ISO-8601 UTC timestamp for freshness checks.
+Hourly unique-visitor counts cannot be summed into daily unique reach, because one device can
+appear in several hours. The selected hour changes store footfall evidence, not the
+daypart-level cannibalization denominator. The current snapshot does not include H3 cells or
+device trajectories, so the map is not yet a 3D hexbin or measured route visualization.
 
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
 cannibalization fixture. Its refresh timestamp is fixed evidence,

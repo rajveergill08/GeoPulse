@@ -18,7 +18,8 @@ The current implementation provides:
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
-- A React/Kepler.gl decision dashboard with KPI cards, scenario selection, and mobility arcs.
+- A React/Kepler.gl decision dashboard with KPI cards, scenario selection, store-pair links,
+  and a retail-local hourly footfall scrubber.
 - A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
 - A Snowflake batch publisher that validates staged rows and replaces one retail day atomically.
 - A read-only dashboard exporter that publishes validated aggregate mart results as an atomic JSON snapshot.
@@ -135,6 +136,10 @@ and retry rules.
 
 The dashboard requires Node.js 20.19 or newer. It starts with a synthetic, aggregated fixture so
 the full decision workflow can be evaluated without browser access to Snowflake credentials.
+The hour selector shows observed per-store footfall for one local hour; it does not recalculate
+the separate daypart cannibalization ratio or infer a device route. H3 hexbins remain a later
+spatial-aggregation milestone. The exporter is synthetic-only until real-data small-cell and
+access controls receive a separate privacy review.
 
 ```powershell
 Set-Location dashboard

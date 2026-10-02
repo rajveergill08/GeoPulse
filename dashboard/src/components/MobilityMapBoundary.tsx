@@ -10,12 +10,13 @@ import {MobilityMap} from './MobilityMap';
 interface MobilityMapBoundaryProps {
   snapshot: DashboardSnapshot;
   flow: CannibalizationFlow;
+  selectedHour: number;
 }
 
-export function MobilityMapBoundary({snapshot, flow}: MobilityMapBoundaryProps) {
+export function MobilityMapBoundary({snapshot, flow, selectedHour}: MobilityMapBoundaryProps) {
   return (
     <Provider store={store}>
-      <MobilityMap snapshot={snapshot} flow={flow} />
+      <MobilityMap snapshot={snapshot} flow={flow} selectedHour={selectedHour} />
     </Provider>
   );
 }

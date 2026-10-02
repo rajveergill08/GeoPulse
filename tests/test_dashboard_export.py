@@ -14,11 +14,13 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from geopulse.dashboard_export import (
+    HOURLY_COLUMNS,
     MART_COLUMNS,
     DashboardExportConfig,
     DashboardExportError,
     build_snapshot,
     fetch_aggregate_rows,
+    fetch_hourly_rows,
     main,
     read_dashboard_connection_settings,
     read_stores,
@@ -53,10 +55,24 @@ def mart_row(**changes: object) -> dict[str, object]:
     return row
 
 
+def hourly_row(**changes: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "store_id": "store_a",
+        "traffic_date_local": date(2026, 9, 30),
+        "event_hour_local": 8,
+        "retail_timezone": "Asia/Kolkata",
+        "unique_visitors": Decimal("10"),
+        "ping_count": Decimal("12"),
+    }
+    row.update(changes)
+    return row
+
+
 class FakeCursor:
     def __init__(self, connection: FakeConnection) -> None:
         self.connection = connection
         self.description = [(name.upper(),) for name in MART_COLUMNS]
+        self.columns = MART_COLUMNS
 
     def __enter__(self) -> FakeCursor:
         return self
@@ -66,17 +82,33 @@ class FakeCursor:
 
     def execute(self, sql: str, parameters: object = None) -> FakeCursor:
         self.connection.statements.append((sql, parameters))
+        if "FCT_STORE_HOURLY_FOOTFALL" in sql:
+            self.columns = HOURLY_COLUMNS
+            self.description = [(name.upper(),) for name in HOURLY_COLUMNS]
         if self.connection.fail_query:
             raise RuntimeError("secret-password: query failed")
         return self
 
     def fetchall(self) -> list[tuple[object, ...]]:
-        return [tuple(row[name] for name in MART_COLUMNS) for row in self.connection.rows]
+        if self.columns == HOURLY_COLUMNS:
+            rows = self.connection.hourly_rows
+        else:
+            rows = self.connection.rows
+        return [tuple(row[name] for name in self.columns) for row in rows]
 
 
 class FakeConnection:
-    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[dict[str, object]] | None = None,
+        hourly_rows: list[dict[str, object]] | None = None,
+    ) -> None:
         self.rows = rows if rows is not None else [mart_row()]
+        self.hourly_rows = (
+            hourly_rows
+            if hourly_rows is not None
+            else [hourly_row(), hourly_row(store_id="store_b", unique_visitors=4, ping_count=5)]
+        )
         self.statements: list[tuple[str, object]] = []
         self.fail_query = False
         self.closed = False
@@ -102,7 +134,7 @@ class DashboardExportTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.directory.cleanup()
 
-    def _args(self, *, synthetic: bool = False) -> list[str]:
+    def _args(self, *, synthetic: bool = True) -> list[str]:
         args = [
             "--run-date",
             "2026-09-30",
@@ -119,6 +151,10 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(
             self.config.mart_table, "GEOPULSE.ANALYTICS_MARTS.FCT_STORE_CANNIBALIZATION"
         )
+        self.assertEqual(
+            self.config.hourly_mart_table,
+            "GEOPULSE.ANALYTICS_MARTS.FCT_STORE_HOURLY_FOOTFALL",
+        )
         configured = DashboardExportConfig(
             date(2026, 9, 30),
             self.stores_path,
@@ -128,6 +164,10 @@ class DashboardExportTests(unittest.TestCase):
         )
         self.assertEqual(
             configured.mart_table, "RETAIL_DB.ANALYTICS_DEV_MARTS.FCT_STORE_CANNIBALIZATION"
+        )
+        self.assertEqual(
+            configured.hourly_mart_table,
+            "RETAIL_DB.ANALYTICS_DEV_MARTS.FCT_STORE_HOURLY_FOOTFALL",
         )
 
     def test_db_identifiers_and_output_collision_are_rejected(self) -> None:
@@ -165,6 +205,22 @@ class DashboardExportTests(unittest.TestCase):
         self.assertNotIn("DEVICE_ID", sql)
         self.assertEqual(parameters, ("2026-09-30",))
 
+    def test_hourly_query_is_read_only_aggregate_only_and_date_is_bound(self) -> None:
+        connection = FakeConnection()
+        rows = fetch_hourly_rows(connection, self.config)
+        self.assertEqual(rows, connection.hourly_rows)
+        self.assertTrue(connection.cursor_closed)
+        self.assertEqual(len(connection.statements), 1)
+        sql, parameters = connection.statements[0]
+        self.assertTrue(sql.startswith("SELECT "))
+        self.assertIn(", ".join(HOURLY_COLUMNS), sql)
+        self.assertIn(self.config.hourly_mart_table, sql)
+        self.assertIn("TO_DATE(%s)", sql)
+        self.assertNotIn("2026-09-30", sql)
+        self.assertNotIn("DEVICE_ID", sql)
+        self.assertNotIn("LATITUDE", sql)
+        self.assertEqual(parameters, ("2026-09-30",))
+
     def test_mart_column_mismatch_is_rejected(self) -> None:
         connection = FakeConnection()
         bad_cursor = connection.cursor()
@@ -172,6 +228,17 @@ class DashboardExportTests(unittest.TestCase):
         with patch.object(connection, "cursor", return_value=bad_cursor):
             with self.assertRaisesRegex(DashboardExportError, "unexpected aggregate columns"):
                 fetch_aggregate_rows(connection, self.config)
+
+    def test_hourly_mart_column_mismatch_is_rejected(self) -> None:
+        connection = FakeConnection()
+        bad_cursor = connection.cursor()
+        bad_cursor.description = [("DEVICE_ID",)]
+        with (
+            patch.object(connection, "cursor", return_value=bad_cursor),
+            patch.object(bad_cursor, "execute", return_value=bad_cursor),
+        ):
+            with self.assertRaisesRegex(DashboardExportError, "unexpected aggregate columns"):
+                fetch_hourly_rows(connection, self.config)
 
     def test_snowflake_values_map_to_exact_dashboard_contract(self) -> None:
         snapshot = build_snapshot(
@@ -215,6 +282,83 @@ class DashboardExportTests(unittest.TestCase):
         self.assertNotIn("device_id", text.lower())
         self.assertNotIn("password", text.lower())
         self.assertNotIn("store_pair_daypart_key", text.lower())
+
+    def test_hourly_snapshot_is_sparse_sorted_and_contains_no_device_data(self) -> None:
+        rows = [
+            hourly_row(store_id="store_b", event_hour_local=9, unique_visitors=0, ping_count=0),
+            hourly_row(event_hour_local=9, unique_visitors=3, ping_count=4),
+            hourly_row(),
+        ]
+        snapshot = build_snapshot(self.config, self.stores, [mart_row()], hourly_rows=rows)
+        self.assertEqual(
+            snapshot["hourlyFootfall"],
+            [
+                {
+                    "storeId": "store_a",
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 8,
+                    "uniqueVisitors": 10,
+                    "pingCount": 12,
+                },
+                {
+                    "storeId": "store_a",
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 9,
+                    "uniqueVisitors": 3,
+                    "pingCount": 4,
+                },
+                {
+                    "storeId": "store_b",
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 9,
+                    "uniqueVisitors": 0,
+                    "pingCount": 0,
+                },
+            ],
+        )
+        self.assertEqual(len(snapshot["hourlyFootfall"]), len(rows))
+        self.assertEqual(
+            set(snapshot["hourlyFootfall"][0]),
+            {"storeId", "trafficDateLocal", "hourLocal", "uniqueVisitors", "pingCount"},
+        )
+        self.assertIn(self.config.hourly_mart_table, snapshot["metadata"]["source"])
+        self.assertNotIn("device_id", json.dumps(snapshot).lower())
+
+    def test_hourly_date_timezone_store_hour_and_counts_are_validated(self) -> None:
+        for change in (
+            {"store_id": "unknown"},
+            {"traffic_date_local": date(2026, 9, 29)},
+            {"traffic_date_local": datetime(2026, 9, 30, tzinfo=UTC)},
+            {"retail_timezone": "UTC"},
+            {"event_hour_local": -1},
+            {"event_hour_local": 24},
+            {"event_hour_local": "8"},
+            {"event_hour_local": True},
+            {"unique_visitors": -1},
+            {"unique_visitors": Decimal("1.5")},
+            {"unique_visitors": Decimal("NaN")},
+            {"unique_visitors": Decimal("9007199254740992")},
+            {"ping_count": -1},
+            {"ping_count": Decimal("1.5")},
+            {"ping_count": Decimal("9007199254740992")},
+            {"unique_visitors": 13},
+        ):
+            with self.subTest(change=change), self.assertRaises(DashboardExportError):
+                build_snapshot(
+                    self.config,
+                    self.stores,
+                    [mart_row()],
+                    hourly_rows=[hourly_row(**change), hourly_row(store_id="store_b")],
+                )
+
+    def test_hourly_grain_and_flow_store_coverage_are_required(self) -> None:
+        for rows in (
+            [],
+            [hourly_row()],
+            [hourly_row(), hourly_row(), hourly_row(store_id="store_b")],
+        ):
+            with self.subTest(rows=rows), self.assertRaises(DashboardExportError):
+                build_snapshot(self.config, self.stores, [mart_row()], hourly_rows=rows)
 
     def test_multiple_comparisons_are_sorted_and_have_unique_stable_scenarios(self) -> None:
         evening = mart_row(
@@ -344,26 +488,38 @@ class DashboardExportTests(unittest.TestCase):
         write_snapshot_atomically(self.output_path, snapshot)
         self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), snapshot)
 
-    def test_cli_success_writes_snapshot_closes_session_and_marks_synthetic_only_when_flagged(
-        self,
-    ) -> None:
-        for synthetic in (False, True):
-            with self.subTest(synthetic=synthetic):
-                connection = FakeConnection()
-                output = StringIO()
-                with (
-                    patch(
-                        "geopulse.dashboard_export.read_dashboard_connection_settings",
-                        return_value={},
-                    ),
-                    patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
-                    redirect_stdout(output),
-                ):
-                    self.assertEqual(main(self._args(synthetic=synthetic)), 0)
-                self.assertTrue(connection.closed)
-                self.assertEqual(json.loads(output.getvalue())["status"], "exported")
-                snapshot = json.loads(self.output_path.read_text(encoding="utf-8"))
-                self.assertIs(snapshot["metadata"]["synthetic"], synthetic)
+    def test_cli_success_writes_synthetic_snapshot_and_closes_session(self) -> None:
+        connection = FakeConnection()
+        output = StringIO()
+        with (
+            patch(
+                "geopulse.dashboard_export.read_dashboard_connection_settings",
+                return_value={},
+            ),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(main(self._args()), 0)
+        self.assertTrue(connection.closed)
+        self.assertEqual(json.loads(output.getvalue())["status"], "exported")
+        snapshot = json.loads(self.output_path.read_text(encoding="utf-8"))
+        self.assertIs(snapshot["metadata"]["synthetic"], True)
+        self.assertEqual(len(snapshot["hourlyFootfall"]), 2)
+        self.assertEqual(len(connection.statements), 2)
+        self.assertEqual(json.loads(output.getvalue())["hourly_footfall_count"], 2)
+
+    def test_cli_rejects_real_data_without_privacy_review_before_connect(self) -> None:
+        self.output_path.parent.mkdir()
+        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        error = StringIO()
+        with (
+            patch("geopulse.dashboard_export.connect_snowflake") as connect,
+            redirect_stderr(error),
+        ):
+            self.assertEqual(main(self._args(synthetic=False)), 1)
+        connect.assert_not_called()
+        self.assertIn("synthetic-only", error.getvalue())
+        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
 
     def test_cli_bad_local_inputs_never_import_connector_or_mutate_output(self) -> None:
         self.output_path.parent.mkdir()
@@ -400,6 +556,19 @@ class DashboardExportTests(unittest.TestCase):
         self.output_path.parent.mkdir()
         self.output_path.write_text("old-good-snapshot", encoding="utf-8")
         connection = FakeConnection([])
+        with (
+            patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stderr(StringIO()),
+        ):
+            self.assertEqual(main(self._args()), 1)
+        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
+        self.assertTrue(connection.closed)
+
+    def test_cli_missing_hourly_coverage_preserves_previous_snapshot(self) -> None:
+        self.output_path.parent.mkdir()
+        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        connection = FakeConnection(hourly_rows=[hourly_row()])
         with (
             patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
             patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),

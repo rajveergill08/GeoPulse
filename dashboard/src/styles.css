@@ -204,6 +204,147 @@ code {
   line-height: 1.45;
 }
 
+.footfall-timeline {
+  margin-bottom: 18px;
+  padding: 22px 24px 18px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background:
+    linear-gradient(110deg, rgba(66, 219, 156, 0.045), transparent 45%), var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.footfall-timeline__top,
+.footfall-timeline__body {
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.footfall-timeline__top {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.footfall-timeline h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.footfall-timeline__subtitle,
+.footfall-timeline__explanation {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.footfall-timeline__time {
+  min-width: 92px;
+  padding: 10px 13px;
+  border: 1px solid rgba(66, 219, 156, 0.28);
+  border-radius: 12px;
+  color: var(--accent-strong);
+  background: rgba(66, 219, 156, 0.08);
+  font-size: 1.2rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.footfall-timeline__body {
+  align-items: center;
+}
+
+.footfall-timeline__scrubber {
+  flex: 1 1 auto;
+  min-width: 220px;
+  display: grid;
+  gap: 10px;
+}
+
+.footfall-timeline__scrubber label {
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.footfall-timeline__scrubber input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.footfall-timeline__scrubber input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.footfall-timeline__ticks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.footfall-timeline__metrics {
+  flex: 0 1 440px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.footfall-timeline__metric {
+  min-width: 0;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.footfall-timeline__store-kind,
+.footfall-timeline__metric-detail {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.footfall-timeline__store-kind {
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.footfall-timeline__store-name {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 0.77rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footfall-timeline__metric strong {
+  margin: auto 0 3px;
+  color: var(--accent-strong);
+  font-size: clamp(1rem, 1.8vw, 1.6rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+.footfall-timeline__metric-detail {
+  line-height: 1.4;
+}
+
+.footfall-timeline__explanation {
+  margin-top: 16px;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -427,7 +568,7 @@ code {
   background: linear-gradient(145deg, transparent 20%, rgba(248, 184, 100, 0.04), transparent 80%);
 }
 
-.map-preview__route {
+.map-preview__link {
   position: absolute;
   inset: 8% 3% 16%;
   width: 94%;
@@ -435,12 +576,11 @@ code {
   overflow: visible;
 }
 
-.map-preview__route path {
+.map-preview__link path {
   fill: none;
   stroke: url(#preview-flow);
-  stroke-width: 4;
+  stroke-width: 3;
   stroke-linecap: round;
-  stroke-dasharray: 8 10;
   filter: drop-shadow(0 0 8px rgba(66, 219, 156, 0.4));
 }
 
@@ -506,6 +646,20 @@ code {
   color: var(--accent-strong);
   font-size: 1.7rem;
   letter-spacing: -0.04em;
+}
+
+.map-preview__hour-note {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(10, 21, 25, 0.9);
+  font-size: 0.72rem;
 }
 
 .map-token-notice code {
@@ -576,6 +730,16 @@ code {
     align-items: start;
   }
 
+  .footfall-timeline__body {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .footfall-timeline__scrubber,
+  .footfall-timeline__metrics {
+    flex: none;
+  }
+
   .scenario-panel > div:first-child,
   .scenario-select,
   .source-note {
@@ -615,6 +779,27 @@ code {
 
   .kpi-card {
     min-height: 126px;
+  }
+
+  .footfall-timeline {
+    padding: 18px;
+  }
+
+  .footfall-timeline__top {
+    gap: 12px;
+  }
+
+  .footfall-timeline__time {
+    min-width: 78px;
+    font-size: 1rem;
+  }
+
+  .footfall-timeline__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .footfall-timeline__metric {
+    min-height: 106px;
   }
 
   .map-card__header,

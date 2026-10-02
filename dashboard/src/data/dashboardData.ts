@@ -1,4 +1,4 @@
-import type {CannibalizationFlow, DashboardSnapshot, StoreMetric} from './types';
+import type {CannibalizationFlow, DashboardSnapshot, HourlyFootfall, StoreMetric} from './types';
 
 const DEFAULT_DATA_URL = '/data/geopulse-dashboard.json';
 const snapshotRequests = new Map<string, Promise<DashboardSnapshot>>();
@@ -17,6 +17,41 @@ function isRate(value: unknown): value is number {
 
 function isVisitorCount(value: unknown): value is number {
   return isFiniteNumber(value) && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isIsoLocalDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
+}
+
+function isHourlyFootfall(value: unknown): value is HourlyFootfall {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Object.keys(value).length === 5 &&
+    typeof value.storeId === 'string' &&
+    value.storeId.length > 0 &&
+    isIsoLocalDate(value.trafficDateLocal) &&
+    typeof value.hourLocal === 'number' &&
+    Number.isInteger(value.hourLocal) &&
+    value.hourLocal >= 0 &&
+    value.hourLocal <= 23 &&
+    isVisitorCount(value.uniqueVisitors) &&
+    isVisitorCount(value.pingCount) &&
+    value.uniqueVisitors <= value.pingCount
+  );
 }
 
 function matchesRoundedRate(actual: number, expected: number): boolean {
@@ -113,6 +148,24 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
 
   if (hasMissingStore) {
     throw new Error('Dashboard flow references a store that is not in the response.');
+  }
+
+  if (!Array.isArray(value.hourlyFootfall) || !value.hourlyFootfall.every(isHourlyFootfall)) {
+    throw new Error('Dashboard response contains invalid hourly footfall metrics.');
+  }
+
+  const flowDates = new Set(value.flows.map((flow) => flow.trafficDateLocal));
+  const hourlyKeys = new Set<string>();
+  for (const row of value.hourlyFootfall) {
+    if (!storeIds.has(row.storeId) || !flowDates.has(row.trafficDateLocal)) {
+      throw new Error('Dashboard hourly footfall references an unknown store or flow date.');
+    }
+
+    const key = `${row.storeId}\u0000${row.trafficDateLocal}\u0000${row.hourLocal}`;
+    if (hourlyKeys.has(key)) {
+      throw new Error('Dashboard hourly footfall contains duplicate store-hour metrics.');
+    }
+    hourlyKeys.add(key);
   }
 
   return value as unknown as DashboardSnapshot;

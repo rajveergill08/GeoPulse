@@ -18,6 +18,11 @@ pings inside one catchment during the same hour contributes one unique visitor b
 A ping in overlapping catchments contributes independently to each store; this preserves the
 evidence required for the Week 3 cannibalization model.
 
+`unique_visitors` is distinct within one store-hour, not across the whole day. Summing its 24
+hourly values would count a device again if it returns in another hour. The dashboard's hour
+scrubber therefore presents one hourly observation at a time and does not call that sum daily
+unique reach. A missing store-hour is absent source coverage, not a proved zero.
+
 Raw observations remain canonical UTC timestamps. Before hourly bucketing and daypart assignment,
 dbt converts them to `geopulse_retail_timezone`, which defaults to `Asia/Kolkata`. This prevents a
 07:30 Bengaluru commute from being classified as an overnight UTC observation and correctly
@@ -59,7 +64,8 @@ dbt parse --profiles-dir profiles/snowflake --target snowflake --no-partial-pars
 ```
 
 The CI seed is synthetic and includes repeated pings, overlapping catchments, and morning/evening
-hours. It must never be loaded into a production schema.
+hours. It must never be loaded into a production schema. CI also checks that each reported local
+hour matches the model's local timestamp, date, and timezone.
 
 ## Snowflake execution
 

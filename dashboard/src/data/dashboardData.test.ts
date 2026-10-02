@@ -45,6 +45,22 @@ function validSnapshot(): DashboardSnapshot {
         candidateOverlapRate: 0.75,
         candidateIncrementalReachRate: 0.25
       }
+    ],
+    hourlyFootfall: [
+      {
+        storeId: 'store_a',
+        trafficDateLocal: '2026-09-22',
+        hourLocal: 8,
+        uniqueVisitors: 10,
+        pingCount: 11
+      },
+      {
+        storeId: 'store_b',
+        trafficDateLocal: '2026-09-22',
+        hourLocal: 8,
+        uniqueVisitors: 4,
+        pingCount: 4
+      }
     ]
   };
 }
@@ -116,6 +132,85 @@ describe('parseDashboardSnapshot', () => {
 
     expect(() => parseDashboardSnapshot(snapshot)).toThrow(
       'Dashboard response contains invalid store metadata.'
+    );
+  });
+
+  it('requires explicit hourly data but permits a sparse empty hour series', () => {
+    const missing: Partial<DashboardSnapshot> = validSnapshot();
+    delete missing.hourlyFootfall;
+    expect(() => parseDashboardSnapshot(missing)).toThrow(
+      'Dashboard response contains invalid hourly footfall metrics.'
+    );
+
+    const sparse = validSnapshot();
+    sparse.hourlyFootfall = [];
+    expect(parseDashboardSnapshot(sparse)).toEqual(sparse);
+  });
+
+  it('rejects unknown stores or a date not represented by a scenario flow', () => {
+    const unknownStore = validSnapshot();
+    unknownStore.hourlyFootfall[0].storeId = 'store_missing';
+    expect(() => parseDashboardSnapshot(unknownStore)).toThrow(
+      'Dashboard hourly footfall references an unknown store or flow date.'
+    );
+
+    const unrelatedDate = validSnapshot();
+    unrelatedDate.hourlyFootfall[0].trafficDateLocal = '2026-09-23';
+    expect(() => parseDashboardSnapshot(unrelatedDate)).toThrow(
+      'Dashboard hourly footfall references an unknown store or flow date.'
+    );
+  });
+
+  it('rejects invalid local dates and hours', () => {
+    for (const localDate of ['2026-02-30', '2026-9-22', '2026-09-22T00:00:00Z']) {
+      const snapshot = validSnapshot();
+      snapshot.hourlyFootfall[0].trafficDateLocal = localDate;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid hourly footfall metrics.'
+      );
+    }
+
+    for (const hour of [-1, 24, 8.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const snapshot = validSnapshot();
+      snapshot.hourlyFootfall[0].hourLocal = hour;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid hourly footfall metrics.'
+      );
+    }
+  });
+
+  it('rejects negative, fractional, unsafe, or inconsistent hourly counts', () => {
+    for (const [uniqueVisitors, pingCount] of [
+      [-1, 1],
+      [0.5, 1],
+      [Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER + 1],
+      [2, 1]
+    ]) {
+      const snapshot = validSnapshot();
+      snapshot.hourlyFootfall[0].uniqueVisitors = uniqueVisitors;
+      snapshot.hourlyFootfall[0].pingCount = pingCount;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid hourly footfall metrics.'
+      );
+    }
+  });
+
+  it('rejects duplicate store-date-hour rows', () => {
+    const snapshot = validSnapshot();
+    snapshot.hourlyFootfall.push({...snapshot.hourlyFootfall[0]});
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard hourly footfall contains duplicate store-hour metrics.'
+    );
+  });
+
+  it('rejects unexpected fields in an hourly aggregate', () => {
+    const snapshot = validSnapshot();
+    const hourlyRow = snapshot.hourlyFootfall[0] as typeof snapshot.hourlyFootfall[number] & {
+      deviceId?: string;
+    };
+    hourlyRow.deviceId = 'private-device';
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard response contains invalid hourly footfall metrics.'
     );
   });
 });

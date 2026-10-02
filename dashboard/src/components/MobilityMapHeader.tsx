@@ -13,7 +13,7 @@ export function MobilityMapHeader() {
           <i className="legend-dot legend-dot--candidate" />Candidate
         </span>
         <span>
-          <i className="legend-line" />Shared flow
+          <i className="legend-line" />Overlap link
         </span>
       </div>
     </div>

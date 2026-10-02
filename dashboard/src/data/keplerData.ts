@@ -3,6 +3,7 @@ import type {CannibalizationFlow, DashboardSnapshot} from './types';
 
 export const STORES_DATASET_ID = 'geopulse_stores';
 export const FLOWS_DATASET_ID = 'geopulse_flows';
+export const HOURLY_FOOTFALL_DATASET_ID = 'geopulse_hourly_footfall';
 
 interface KeplerField {
   name: string;
@@ -28,12 +29,18 @@ export function buildKeplerDatasets(
   const existingStore = findStore(snapshot, flow.existingStoreId);
   const candidateStore = findStore(snapshot, flow.candidateStoreId);
   const selectedStores = [existingStore, candidateStore];
+  const storesById = new Map(selectedStores.map((store) => [store.storeId, store]));
+  const hourlyRows = snapshot.hourlyFootfall.filter(
+    (row) =>
+      storesById.has(row.storeId) &&
+      row.trafficDateLocal === flow.trafficDateLocal
+  );
 
   return [
     {
       info: {
         id: STORES_DATASET_ID,
-        label: 'Store catchments'
+        label: 'Store locations'
       },
       data: {
         fields: [
@@ -57,7 +64,7 @@ export function buildKeplerDatasets(
     {
       info: {
         id: FLOWS_DATASET_ID,
-        label: 'Shared commuter flow'
+        label: 'Store-pair visitor overlap (not observed paths)'
       },
       data: {
         fields: [
@@ -88,6 +95,39 @@ export function buildKeplerDatasets(
             flow.trafficDateLocal
           ]
         ]
+      }
+    },
+    {
+      info: {
+        id: HOURLY_FOOTFALL_DATASET_ID,
+        label: 'Reported hourly catchment visitors'
+      },
+      data: {
+        fields: [
+          {name: 'store_id', type: 'string', format: ''},
+          {name: 'store_name', type: 'string', format: ''},
+          {name: 'store_status', type: 'string', format: ''},
+          {name: 'latitude', type: 'real', format: ''},
+          {name: 'longitude', type: 'real', format: ''},
+          {name: 'traffic_date_local', type: 'string', format: ''},
+          {name: 'hour_local', type: 'integer', format: ''},
+          {name: 'unique_visitors', type: 'integer', format: ''},
+          {name: 'ping_count', type: 'integer', format: ''}
+        ],
+        rows: hourlyRows.map((row) => {
+          const store = storesById.get(row.storeId)!;
+          return [
+            row.storeId,
+            store.storeName,
+            store.status,
+            store.latitude,
+            store.longitude,
+            row.trafficDateLocal,
+            row.hourLocal,
+            row.uniqueVisitors,
+            row.pingCount
+          ];
+        })
       }
     }
   ];
