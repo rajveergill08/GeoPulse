@@ -58,6 +58,9 @@ models:
       - name: shared_visitors
         description: Devices observed in both catchments during the same retail-local date and daypart.
         data_tests: [not_null]
+      - name: ordered_candidate_to_existing_visitors
+        description: Distinct shared devices with at least one candidate-only ping strictly before an existing-only ping in the same local date and daypart; observational, not causal diversion.
+        data_tests: [not_null]
       - name: cannibalization_rate
         description: Shared visitors divided by existing-store unique visitors.
         data_tests: [not_null]
@@ -92,9 +95,9 @@ unit_tests:
     given:
       - input: ref('int_store_pair_daypart_overlap')
         rows:
-          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
-          - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}
+          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3, ordered_candidate_to_existing_visitors: 1}
+          - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_local: "2026-09-24", daypart: morning_commute, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0, ordered_candidate_to_existing_visitors: 0}
     expect:
       rows:
-        - {existing_store_id: store_a, candidate_store_id: store_b, cannibalization_rate: 0.3, candidate_overlap_rate: 0.75, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 0.25}
-        - {existing_store_id: store_a, candidate_store_id: store_c, cannibalization_rate: 0.0, candidate_overlap_rate: 0.0, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 1.0}
+        - {existing_store_id: store_a, candidate_store_id: store_b, ordered_candidate_to_existing_visitors: 1, cannibalization_rate: 0.3, candidate_overlap_rate: 0.75, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 0.25}
+        - {existing_store_id: store_a, candidate_store_id: store_c, ordered_candidate_to_existing_visitors: 0, cannibalization_rate: 0.0, candidate_overlap_rate: 0.0, incremental_candidate_visitors: 1, candidate_incremental_reach_rate: 1.0}

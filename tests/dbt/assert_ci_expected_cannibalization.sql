@@ -9,6 +9,7 @@ with expected as (
         10 as existing_store_unique_visitors,
         4 as candidate_store_unique_visitors,
         3 as shared_visitors,
+        0 as ordered_candidate_to_existing_visitors,
         1 as incremental_candidate_visitors,
         cast(0.3 as double) as cannibalization_rate,
         cast(0.75 as double) as candidate_overlap_rate,
@@ -24,6 +25,7 @@ actual as (
         existing_store_unique_visitors,
         candidate_store_unique_visitors,
         shared_visitors,
+        ordered_candidate_to_existing_visitors,
         incremental_candidate_visitors,
         cannibalization_rate,
         candidate_overlap_rate,
@@ -47,6 +49,8 @@ where expected.existing_store_id is null
    or expected.existing_store_unique_visitors <> actual.existing_store_unique_visitors
    or expected.candidate_store_unique_visitors <> actual.candidate_store_unique_visitors
    or expected.shared_visitors <> actual.shared_visitors
+   or expected.ordered_candidate_to_existing_visitors
+        <> actual.ordered_candidate_to_existing_visitors
    or expected.incremental_candidate_visitors <> actual.incremental_candidate_visitors
    or expected.cannibalization_rate <> actual.cannibalization_rate
    or expected.candidate_overlap_rate <> actual.candidate_overlap_rate

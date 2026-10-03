@@ -18,6 +18,8 @@ The current implementation provides:
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
+- A separate sequence-aware diagnostic that excludes same-ping catchment overlap from ordered
+  candidate-to-existing visitor evidence.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, store-pair links,
   and a retail-local hourly footfall scrubber.
 - A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
@@ -91,7 +93,8 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 
 `fct_store_hourly_footfall` distinguishes unique visitors from raw ping volume. The downstream
 `fct_store_cannibalization` model compares existing and proposed catchments by date and daypart;
-the deterministic fixture proves a 30% morning traffic-at-risk scenario. See
+the deterministic fixture yields a 30% morning overlap proxy but zero strictly ordered
+candidate-to-existing visitors. See
 `docs/dbt-footfall.md` and `docs/cannibalization.md` for metric definitions, interpretation
 guardrails, and Snowflake execution instructions.
 

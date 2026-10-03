@@ -30,7 +30,7 @@ models:
                 values: ["morning_commute", "midday", "evening_commute", "off_peak"]
 
   - name: int_store_pair_daypart_overlap
-    description: Visitor overlap for each existing/candidate store pair, retail-local date, and daypart.
+    description: Visitor overlap and strictly ordered observational evidence for each store pair, retail-local date, and daypart.
     columns:
       - name: existing_store_id
         data_tests: [not_null]
@@ -45,6 +45,23 @@ models:
       - name: candidate_store_unique_visitors
         data_tests: [not_null]
       - name: shared_visitors
+        data_tests: [not_null]
+      - name: ordered_candidate_to_existing_visitors
+        description: Shared devices with a candidate-only ping strictly before an existing-only ping in the same local date and daypart.
+        data_tests: [not_null]
+
+  - name: int_store_pair_ordered_evidence
+    description: Aggregate-only count of shared devices observed at the candidate catchment before the existing catchment, excluding simultaneous overlaps.
+    columns:
+      - name: existing_store_id
+        data_tests: [not_null]
+      - name: candidate_store_id
+        data_tests: [not_null]
+      - name: traffic_date_local
+        data_tests: [not_null]
+      - name: daypart
+        data_tests: [not_null]
+      - name: ordered_candidate_to_existing_visitors
         data_tests: [not_null]
 
 unit_tests:
@@ -85,6 +102,9 @@ unit_tests:
     description: Pair metrics retain zero-overlap candidates and count shared devices once.
     model: int_store_pair_daypart_overlap
     given:
+      - input: ref('int_store_pair_ordered_evidence')
+        rows:
+          - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_local: "2026-09-24", daypart: morning_commute, ordered_candidate_to_existing_visitors: 1}
       - input: ref('int_store_device_daypart_visits')
         rows:
           - {device_id: dev_01, store_id: store_a, store_name: Store A, store_status: existing, traffic_date_local: "2026-09-24", daypart: morning_commute}
@@ -104,5 +124,40 @@ unit_tests:
           - {device_id: dev_12, store_id: store_c, store_name: Store C, store_status: candidate, traffic_date_local: "2026-09-24", daypart: morning_commute}
     expect:
       rows:
-        - {existing_store_id: store_a, candidate_store_id: store_b, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3}
-        - {existing_store_id: store_a, candidate_store_id: store_c, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0}
+        - {existing_store_id: store_a, candidate_store_id: store_b, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 4, shared_visitors: 3, ordered_candidate_to_existing_visitors: 1}
+        - {existing_store_id: store_a, candidate_store_id: store_c, existing_store_unique_visitors: 10, candidate_store_unique_visitors: 1, shared_visitors: 0, ordered_candidate_to_existing_visitors: 0}
+
+  - name: int_store_pair_ordered_evidence_requires_exclusive_time_order
+    description: Only a candidate-only ping before a later existing-only ping in the same local date and daypart counts; simultaneous, reverse, and cross-boundary observations do not.
+    model: int_store_pair_ordered_evidence
+    given:
+      - input: ref('int_store_device_daypart_visits')
+        rows:
+          - {device_id: dev_forward, store_id: store_a, store_status: existing, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_forward, store_id: store_b, store_status: proposed, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_same, store_id: store_a, store_status: existing, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_same, store_id: store_c, store_status: candidate, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_reverse, store_id: store_a, store_status: existing, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_reverse, store_id: store_d, store_status: proposed, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_boundary, store_id: store_a, store_status: existing, traffic_date_local: "2026-09-24", daypart: morning_commute}
+          - {device_id: dev_boundary, store_id: store_e, store_status: candidate, traffic_date_local: "2026-09-24", daypart: morning_commute}
+      - input: ref('stg_ping_store_matches')
+        rows:
+          - {device_id: dev_forward, store_id: store_b, event_ts_utc: "2026-09-24 02:35:00"}
+          - {device_id: dev_forward, store_id: store_a, event_ts_utc: "2026-09-24 02:50:00"}
+          - {device_id: dev_same, store_id: store_a, event_ts_utc: "2026-09-24 03:00:00"}
+          - {device_id: dev_same, store_id: store_c, event_ts_utc: "2026-09-24 03:00:00"}
+          - {device_id: dev_reverse, store_id: store_a, event_ts_utc: "2026-09-24 03:05:00"}
+          - {device_id: dev_reverse, store_id: store_d, event_ts_utc: "2026-09-24 03:10:00"}
+          - {device_id: dev_boundary, store_id: store_e, event_ts_utc: "2026-09-23 02:20:00"}
+          - {device_id: dev_boundary, store_id: store_a, event_ts_utc: "2026-09-24 02:25:00"}
+          - {device_id: dev_boundary, store_id: store_a, event_ts_utc: "2026-09-24 02:30:00"}
+          - {device_id: dev_boundary, store_id: store_e, event_ts_utc: "2026-09-24 02:30:00"}
+          - {device_id: dev_boundary, store_id: store_e, event_ts_utc: "2026-09-24 02:45:00"}
+          - {device_id: dev_boundary, store_id: store_a, event_ts_utc: "2026-09-24 06:30:00"}
+    expect:
+      rows:
+        - {existing_store_id: store_a, candidate_store_id: store_b, traffic_date_local: "2026-09-24", daypart: morning_commute, ordered_candidate_to_existing_visitors: 1}
+        - {existing_store_id: store_a, candidate_store_id: store_c, traffic_date_local: "2026-09-24", daypart: morning_commute, ordered_candidate_to_existing_visitors: 0}
+        - {existing_store_id: store_a, candidate_store_id: store_d, traffic_date_local: "2026-09-24", daypart: morning_commute, ordered_candidate_to_existing_visitors: 0}
+        - {existing_store_id: store_a, candidate_store_id: store_e, traffic_date_local: "2026-09-24", daypart: morning_commute, ordered_candidate_to_existing_visitors: 0}

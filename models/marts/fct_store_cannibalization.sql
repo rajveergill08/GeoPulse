@@ -24,6 +24,7 @@ select
     existing_store_unique_visitors,
     candidate_store_unique_visitors,
     shared_visitors,
+    ordered_candidate_to_existing_visitors,
     candidate_store_unique_visitors - shared_visitors as incremental_candidate_visitors,
     round(
         cast(shared_visitors as double)

@@ -3,6 +3,11 @@ with device_visits as (
     from {{ ref('int_store_device_daypart_visits') }}
 ),
 
+ordered_evidence as (
+    select *
+    from {{ ref('int_store_pair_ordered_evidence') }}
+),
+
 store_daypart_totals as (
     select
         store_id,
@@ -67,10 +72,17 @@ select
     pairs.daypart,
     pairs.existing_store_unique_visitors,
     pairs.candidate_store_unique_visitors,
-    coalesce(overlap.shared_visitors, 0) as shared_visitors
+    coalesce(overlap.shared_visitors, 0) as shared_visitors,
+    coalesce(ordered.ordered_candidate_to_existing_visitors, 0)
+        as ordered_candidate_to_existing_visitors
 from eligible_store_pairs as pairs
 left join shared_visitors as overlap
     on pairs.existing_store_id = overlap.existing_store_id
    and pairs.candidate_store_id = overlap.candidate_store_id
    and pairs.traffic_date_local = overlap.traffic_date_local
    and pairs.daypart = overlap.daypart
+left join ordered_evidence as ordered
+    on pairs.existing_store_id = ordered.existing_store_id
+   and pairs.candidate_store_id = ordered.candidate_store_id
+   and pairs.traffic_date_local = ordered.traffic_date_local
+   and pairs.daypart = ordered.daypart
