@@ -44,6 +44,7 @@ MART_COLUMNS = (
     "existing_store_unique_visitors",
     "candidate_store_unique_visitors",
     "shared_visitors",
+    "ordered_candidate_to_existing_visitors",
     "incremental_candidate_visitors",
     "cannibalization_rate",
     "candidate_overlap_rate",
@@ -385,8 +386,13 @@ def build_snapshot(
             row["candidate_store_unique_visitors"], "candidate visitors", positive=True
         )
         shared = _count(row["shared_visitors"], "shared visitors")
+        ordered = _count(row.get("ordered_candidate_to_existing_visitors"), "ordered visitors")
         incremental = _count(row["incremental_candidate_visitors"], "incremental visitors")
-        if shared > min(existing, candidate) or incremental != candidate - shared:
+        if (
+            shared > min(existing, candidate)
+            or ordered > shared
+            or incremental != candidate - shared
+        ):
             raise DashboardExportError("Mart visitor counts are inconsistent")
         cannibalization = _rate(row["cannibalization_rate"], "cannibalization rate")
         overlap = _rate(row["candidate_overlap_rate"], "candidate overlap rate")
@@ -411,6 +417,7 @@ def build_snapshot(
                 "existingStoreUniqueVisitors": existing,
                 "candidateStoreUniqueVisitors": candidate,
                 "sharedVisitors": shared,
+                "orderedCandidateToExistingVisitors": ordered,
                 "incrementalCandidateVisitors": incremental,
                 "cannibalizationRate": float(cannibalization),
                 "candidateOverlapRate": float(overlap),

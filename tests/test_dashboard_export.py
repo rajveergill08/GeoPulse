@@ -46,6 +46,7 @@ def mart_row(**changes: object) -> dict[str, object]:
         "existing_store_unique_visitors": Decimal("10"),
         "candidate_store_unique_visitors": Decimal("4"),
         "shared_visitors": Decimal("3"),
+        "ordered_candidate_to_existing_visitors": Decimal("0"),
         "incremental_candidate_visitors": Decimal("1"),
         "cannibalization_rate": Decimal("0.300000"),
         "candidate_overlap_rate": Decimal("0.750000"),
@@ -199,10 +200,13 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(len(connection.statements), 1)
         sql, parameters = connection.statements[0]
         self.assertTrue(sql.startswith("SELECT "))
+        self.assertIn(", ".join(MART_COLUMNS), sql)
         self.assertIn(self.config.mart_table, sql)
         self.assertIn("TO_DATE(%s)", sql)
         self.assertNotIn("2026-09-30", sql)
         self.assertNotIn("DEVICE_ID", sql)
+        self.assertNotIn("PING_LATITUDE", sql)
+        self.assertNotIn("PING_LONGITUDE", sql)
         self.assertEqual(parameters, ("2026-09-30",))
 
     def test_hourly_query_is_read_only_aggregate_only_and_date_is_bound(self) -> None:
@@ -271,6 +275,7 @@ class DashboardExportTests(unittest.TestCase):
                     "existingStoreUniqueVisitors": 10,
                     "candidateStoreUniqueVisitors": 4,
                     "sharedVisitors": 3,
+                    "orderedCandidateToExistingVisitors": 0,
                     "incrementalCandidateVisitors": 1,
                     "cannibalizationRate": 0.3,
                     "candidateOverlapRate": 0.75,
@@ -378,6 +383,38 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(
             [flow["candidateStoreId"] for flow in first["flows"]], ["store_b", "store_b", "store_c"]
         )
+
+    def test_positive_ordered_count_is_exported_without_changing_overlap_rate(self) -> None:
+        snapshot = build_snapshot(
+            self.config,
+            self.stores,
+            [mart_row(ordered_candidate_to_existing_visitors=Decimal("2"))],
+        )
+        flow = snapshot["flows"][0]
+        self.assertEqual(flow["orderedCandidateToExistingVisitors"], 2)
+        self.assertEqual(flow["sharedVisitors"], 3)
+        self.assertEqual(flow["cannibalizationRate"], 0.3)
+
+    def test_ordered_count_is_required_safe_integer_bounded_by_shared(self) -> None:
+        for value in (
+            None,
+            True,
+            -1,
+            Decimal("1.5"),
+            Decimal("NaN"),
+            Decimal("9007199254740992"),
+            4,
+        ):
+            with self.subTest(value=value), self.assertRaises(DashboardExportError):
+                build_snapshot(
+                    self.config,
+                    self.stores,
+                    [mart_row(ordered_candidate_to_existing_visitors=value)],
+                )
+        missing = mart_row()
+        del missing["ordered_candidate_to_existing_visitors"]
+        with self.assertRaises(DashboardExportError):
+            build_snapshot(self.config, self.stores, [missing])
 
     def test_duplicate_grain_and_empty_day_are_rejected(self) -> None:
         for rows in ([], [mart_row(), mart_row()]):
@@ -504,6 +541,7 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue())["status"], "exported")
         snapshot = json.loads(self.output_path.read_text(encoding="utf-8"))
         self.assertIs(snapshot["metadata"]["synthetic"], True)
+        self.assertEqual(snapshot["flows"][0]["orderedCandidateToExistingVisitors"], 0)
         self.assertEqual(len(snapshot["hourlyFootfall"]), 2)
         self.assertEqual(len(connection.statements), 2)
         self.assertEqual(json.loads(output.getvalue())["hourly_footfall_count"], 2)
@@ -569,6 +607,19 @@ class DashboardExportTests(unittest.TestCase):
         self.output_path.parent.mkdir()
         self.output_path.write_text("old-good-snapshot", encoding="utf-8")
         connection = FakeConnection(hourly_rows=[hourly_row()])
+        with (
+            patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stderr(StringIO()),
+        ):
+            self.assertEqual(main(self._args()), 1)
+        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
+        self.assertTrue(connection.closed)
+
+    def test_cli_invalid_ordered_count_preserves_previous_snapshot(self) -> None:
+        self.output_path.parent.mkdir()
+        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        connection = FakeConnection(rows=[mart_row(ordered_candidate_to_existing_visitors=4)])
         with (
             patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
             patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),

@@ -18,6 +18,7 @@ const flow: CannibalizationFlow = {
   existingStoreUniqueVisitors: 10,
   candidateStoreUniqueVisitors: 4,
   sharedVisitors: 3,
+  orderedCandidateToExistingVisitors: 0,
   incrementalCandidateVisitors: 1,
   cannibalizationRate: 0.3,
   candidateOverlapRate: 0.75,

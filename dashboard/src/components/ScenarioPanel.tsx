@@ -1,5 +1,5 @@
 import {findStore} from '../data/dashboardData';
-import {formatDaypart, formatTrafficDate} from '../data/formatters';
+import {formatDaypart, formatInteger, formatTrafficDate} from '../data/formatters';
 import type {CannibalizationFlow, DashboardSnapshot} from '../data/types';
 
 interface ScenarioPanelProps {
@@ -61,6 +61,22 @@ export function ScenarioPanel({
           <dd>{candidateStore.catchmentRadiusM} m radius</dd>
         </div>
       </dl>
+
+      <section className="directional-note" aria-labelledby="directional-heading">
+        <h3 id="directional-heading">Observed ping ordering</h3>
+        <p className="directional-note__count">
+          <strong>{formatInteger(selectedFlow.orderedCandidateToExistingVisitors)}</strong> of{' '}
+          <strong>{formatInteger(selectedFlow.sharedVisitors)}</strong> shared visitors
+        </p>
+        <p>
+          Counts a shared visitor only when a candidate-only ping precedes a later existing-only
+          ping on the selected retail-local date and daypart. Same-ping catchment overlap is
+          excluded.
+        </p>
+        <small>
+          This is not a traced route, interception, or lost sale. Zero does not prove no movement.
+        </small>
+      </section>
 
       <div className="decision-note">
         <span className="decision-note__icon" aria-hidden="true">

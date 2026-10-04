@@ -56,8 +56,8 @@ the candidate catchment. It stays within one retail-local date and daypart and c
 `shared_visitors`. It still does not reconstruct a continuous path or establish that opening a
 new store would divert a customer. A device can traverse both areas for unrelated reasons, and
 zero ordered evidence may simply reflect sparse GPS sampling rather than no real-world movement.
-The dashboard's current snapshot continues to show the overlap KPIs; this new diagnostic is
-available in the dbt mart and is not yet a displayed route or hourly dashboard metric.
+The dashboard presents this as a separate daypart diagnostic beside the overlap KPIs; it is
+not displayed as a route or an hourly metric.
 
 Device-level processing in the intermediate models exists only to calculate overlap and ordering.
 Production roles should restrict it, apply an approved retention period, and expose only

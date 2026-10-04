@@ -2,8 +2,8 @@
 
 This React dashboard turns the aggregated GeoPulse cannibalization mart into a location-decision
 view for retail real-estate teams. It presents traffic at risk, shared visitors, candidate overlap,
-incremental reach, and retail-local hourly footfall. The map's store-pair link depicts the
-comparison relationship, not an observed commuter route.
+incremental reach, a separate ordered-observation diagnostic, and retail-local hourly footfall.
+The map's store-pair link depicts the comparison relationship, not an observed commuter route.
 
 ## Run locally
 
@@ -38,17 +38,24 @@ The endpoint returns one snapshot with:
 - `metadata`: source description, UTC refresh timestamp, retail timezone, and synthetic-data flag.
 - `stores`: store identity, status, coordinates, and catchment radius.
 - `flows`: a retail-local date/daypart comparison between an existing and candidate store,
-  including unique visitors, shared visitors, incremental visitors, and three rates expressed
-  from 0 to 1.
+  including unique visitors, shared visitors, ordered candidate-to-existing visitors,
+  incremental visitors, and three rates expressed from 0 to 1.
 - `hourlyFootfall`: reported store-hour observations with local hour (0–23), distinct visitors
   in that hour, and ping count. Missing store-hours are not silently treated as zero.
 
 Every flow must reference stores in the same response. Visitor counts must be non-negative,
 JavaScript-safe integers; shared visitors cannot exceed either store's visitors, and incremental
-visitors must equal candidate visitors minus shared visitors. Each rate must agree with its
-visitor counts to the dbt mart's six-decimal precision, and candidate overlap plus incremental
+visitors must equal candidate visitors minus shared visitors. Ordered visitors must be between
+zero and shared visitors. Each rate must agree with its visitor counts to the dbt mart's
+six-decimal precision, and candidate overlap plus incremental
 reach must equal 100% within that tolerance. The client rejects a snapshot that breaks these
 rules instead of displaying misleading metrics.
+
+The ordered count requires a candidate-only GPS match strictly before a separate
+existing-only match in the same local date/daypart. Simultaneous matches to both catchments do
+not count. It is observational evidence, not a measured route, intercepted sale, or hourly rate;
+zero can also reflect sparse GPS sampling. The synthetic sample has three shared visitors but
+zero ordered visitors.
 
 `trafficDateLocal`, the 24-hour scrubber, and all displayed dayparts use
 `metadata.retailTimezone`; `refreshedAt` remains an ISO-8601 UTC timestamp for freshness checks.

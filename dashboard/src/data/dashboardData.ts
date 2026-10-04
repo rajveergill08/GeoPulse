@@ -87,6 +87,7 @@ function isFlow(value: unknown): value is CannibalizationFlow {
   const existingVisitors = value.existingStoreUniqueVisitors;
   const candidateVisitors = value.candidateStoreUniqueVisitors;
   const sharedVisitors = value.sharedVisitors;
+  const orderedVisitors = value.orderedCandidateToExistingVisitors;
   const incrementalVisitors = value.incrementalCandidateVisitors;
 
   return (
@@ -104,6 +105,8 @@ function isFlow(value: unknown): value is CannibalizationFlow {
     isVisitorCount(sharedVisitors) &&
     sharedVisitors <= existingVisitors &&
     sharedVisitors <= candidateVisitors &&
+    isVisitorCount(orderedVisitors) &&
+    orderedVisitors <= sharedVisitors &&
     isVisitorCount(incrementalVisitors) &&
     incrementalVisitors === candidateVisitors - sharedVisitors &&
     isRate(value.cannibalizationRate) &&

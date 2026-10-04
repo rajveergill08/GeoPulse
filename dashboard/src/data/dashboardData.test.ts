@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import {describe, expect, it} from 'vitest';
 
 import {parseDashboardSnapshot} from './dashboardData';
@@ -40,6 +42,7 @@ function validSnapshot(): DashboardSnapshot {
         existingStoreUniqueVisitors: 10,
         candidateStoreUniqueVisitors: 4,
         sharedVisitors: 3,
+        orderedCandidateToExistingVisitors: 0,
         incrementalCandidateVisitors: 1,
         cannibalizationRate: 0.3,
         candidateOverlapRate: 0.75,
@@ -66,6 +69,17 @@ function validSnapshot(): DashboardSnapshot {
 }
 
 describe('parseDashboardSnapshot', () => {
+  it('keeps the synthetic public fixture at 30% overlap with zero ordered visitors', () => {
+    const fixtureUrl = new URL('../../public/data/geopulse-dashboard.json', import.meta.url);
+    const fixture = parseDashboardSnapshot(JSON.parse(readFileSync(fixtureUrl, 'utf8')) as unknown);
+
+    expect(fixture.flows[0]).toMatchObject({
+      sharedVisitors: 3,
+      cannibalizationRate: 0.3,
+      orderedCandidateToExistingVisitors: 0
+    });
+  });
+
   it('accepts a consistent aggregated mobility snapshot', () => {
     const snapshot = validSnapshot();
 
@@ -93,6 +107,32 @@ describe('parseDashboardSnapshot', () => {
     expect(() => parseDashboardSnapshot(unsafe)).toThrow(
       'Dashboard response contains invalid cannibalization metrics.'
     );
+  });
+
+  it('requires a directional count and accepts zero as an observed result', () => {
+    const valid = validSnapshot();
+    expect(parseDashboardSnapshot(valid)).toEqual(valid);
+
+    const missing = validSnapshot();
+    const incompleteFlow: Partial<(typeof missing.flows)[number]> = missing.flows[0];
+    delete incompleteFlow.orderedCandidateToExistingVisitors;
+    expect(() => parseDashboardSnapshot(missing)).toThrow(
+      'Dashboard response contains invalid cannibalization metrics.'
+    );
+  });
+
+  it('rejects an invalid directional count or one exceeding shared visitors', () => {
+    for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, 4]) {
+      const snapshot = validSnapshot();
+      snapshot.flows[0].orderedCandidateToExistingVisitors = count;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid cannibalization metrics.'
+      );
+    }
+
+    const allShared = validSnapshot();
+    allShared.flows[0].orderedCandidateToExistingVisitors = 3;
+    expect(parseDashboardSnapshot(allShared)).toEqual(allShared);
   });
 
   it('rejects rates that disagree with the exported visitor counts', () => {

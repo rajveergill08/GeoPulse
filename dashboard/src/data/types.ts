@@ -28,6 +28,7 @@ export interface CannibalizationFlow {
   existingStoreUniqueVisitors: number;
   candidateStoreUniqueVisitors: number;
   sharedVisitors: number;
+  orderedCandidateToExistingVisitors: number;
   incrementalCandidateVisitors: number;
   cannibalizationRate: number;
   candidateOverlapRate: number;

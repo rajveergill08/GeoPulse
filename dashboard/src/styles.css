@@ -431,6 +431,45 @@ code {
   line-height: 1.4;
 }
 
+.directional-note {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(114, 230, 175, 0.2);
+  border-radius: 12px;
+  background: rgba(66, 219, 156, 0.045);
+}
+
+.directional-note h3,
+.directional-note p {
+  margin: 0;
+}
+
+.directional-note h3 {
+  color: var(--accent-strong);
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.directional-note__count {
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.directional-note__count strong {
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.directional-note p:not(.directional-note__count),
+.directional-note small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
 .decision-note {
   display: grid;
   grid-template-columns: 24px 1fr;

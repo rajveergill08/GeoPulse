@@ -43,8 +43,11 @@ schema differs, set the same `DBT_SNOWFLAKE_SCHEMA` value for dbt and the export
 
 The output follows the existing `dashboard/src/data/types.ts` contract: UTC refresh time,
 retail timezone, approved store coordinates, daily store-pair/daypart overlap metrics, and
-reported per-store/per-hour footfall. Hourly `uniqueVisitors` counts distinct devices within
-that store-hour only: adding them across hours would double-count repeat visitors. An absent
+the ordered candidate-to-existing observation count, plus reported per-store/per-hour footfall.
+The ordered count must be a non-negative, JavaScript-safe integer no larger than shared visitors;
+it is a daypart diagnostic, not an observed route or causal diversion rate. Hourly
+`uniqueVisitors` counts distinct devices within that store-hour only: adding them across hours
+would double-count repeat visitors. An absent
 store-hour remains unreported, not an inferred zero. A date with no comparison rows, missing
 hourly coverage for a compared store, an unknown store, duplicate store-hour, inconsistent
 visitor math, invalid rates, unsafe-large counts, or conflicting timezones fails instead of
