@@ -4,6 +4,9 @@ This React dashboard turns the aggregated GeoPulse cannibalization mart into a l
 view for retail real-estate teams. It presents traffic at risk, shared visitors, candidate overlap,
 incremental reach, a separate ordered-observation diagnostic, and retail-local hourly footfall.
 The map's store-pair link depicts the comparison relationship, not an observed commuter route.
+The candidate comparison shows only flows against the same existing store, retail-local date,
+and daypart; selecting a candidate updates the KPIs, hourly footfall, and map together. It does
+not rank or recommend locations.
 
 ## Run locally
 
@@ -65,7 +68,11 @@ daypart-level cannibalization denominator. The current snapshot does not include
 device trajectories, so the map is not yet a 3D hexbin or measured route visualization.
 
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
-cannibalization fixture. Its refresh timestamp is fixed evidence,
+cannibalization fixture: Store B has 3 of 10 overlapping existing visitors (30%), while
+Store C has 0 of 10 observed overlap and 4 of 4 candidate-only visitors in the same morning
+window. Zero observed overlap is not proof of no movement or sales impact. The no-token map
+preview is schematic and not to scale; the interactive map frames each selected store pair.
+Its refresh timestamp is fixed evidence,
 not a claim that live data is connected. The scheduled exporter writes outside the source tree,
 so deployment must copy or serve its output; it never silently replaces the committed sample.
 

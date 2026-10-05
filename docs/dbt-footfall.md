@@ -63,9 +63,10 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 dbt parse --profiles-dir profiles/snowflake --target snowflake --no-partial-parse
 ```
 
-The CI seed is synthetic and includes repeated pings, overlapping catchments, and morning/evening
-hours. It must never be loaded into a production schema. CI also checks that each reported local
-hour matches the model's local timestamp, date, and timezone.
+The CI seed is synthetic and includes repeated pings, overlapping catchments, an alternative
+Store C neighborhood with its own morning observations, and morning/evening hours. It must never
+be loaded into a production schema. CI also checks that each reported local hour matches the
+model's local timestamp, date, and timezone.
 
 ## Snowflake execution
 

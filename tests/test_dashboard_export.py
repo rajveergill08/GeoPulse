@@ -374,7 +374,16 @@ class DashboardExportTests(unittest.TestCase):
             candidate_overlap_rate=Decimal("0"),
             candidate_incremental_reach_rate=Decimal("1"),
         )
-        candidate = mart_row(candidate_store_id="store_c", candidate_store_status="candidate")
+        candidate = mart_row(
+            candidate_store_id="store_c",
+            candidate_store_status="candidate",
+            shared_visitors=Decimal("0"),
+            ordered_candidate_to_existing_visitors=Decimal("0"),
+            incremental_candidate_visitors=Decimal("4"),
+            cannibalization_rate=Decimal("0"),
+            candidate_overlap_rate=Decimal("0"),
+            candidate_incremental_reach_rate=Decimal("1"),
+        )
         first = build_snapshot(self.config, self.stores, [candidate, evening, mart_row()])
         second = build_snapshot(self.config, self.stores, [mart_row(), candidate, evening])
         first_ids = [flow["scenarioId"] for flow in first["flows"]]
@@ -383,6 +392,9 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(
             [flow["candidateStoreId"] for flow in first["flows"]], ["store_b", "store_b", "store_c"]
         )
+        self.assertEqual(first["flows"][2]["sharedVisitors"], 0)
+        self.assertEqual(first["flows"][2]["incrementalCandidateVisitors"], 4)
+        self.assertEqual(first["flows"][2]["cannibalizationRate"], 0.0)
 
     def test_positive_ordered_count_is_exported_without_changing_overlap_rate(self) -> None:
         snapshot = build_snapshot(

@@ -15,6 +15,10 @@ dev_a,2026-09-22 02:50:00,2026-09-22,2,12.9745,77.6070,9.0,morning_commute,store
 dev_b,2026-09-22 03:00:00,2026-09-22,3,12.9730,77.6068,12.0,morning_commute,store_b,Store B - Brigade Road,proposed,500.0,125.0
 dev_c,2026-09-22 03:01:00,2026-09-22,3,12.9732,77.6069,10.0,morning_commute,store_b,Store B - Brigade Road,proposed,500.0,115.0
 dev_x,2026-09-22 03:10:00,2026-09-22,3,12.9728,77.6071,8.0,morning_commute,store_b,Store B - Brigade Road,proposed,500.0,95.0
+dev_k,2026-09-22 03:10:00,2026-09-22,3,12.9785,77.6408,8.0,morning_commute,store_c,Store C - Indiranagar,candidate,500.0,11.1
+dev_l,2026-09-22 03:11:00,2026-09-22,3,12.9783,77.6407,9.0,morning_commute,store_c,Store C - Indiranagar,candidate,500.0,15.5
+dev_m,2026-09-22 03:12:00,2026-09-22,3,12.9786,77.6409,10.0,morning_commute,store_c,Store C - Indiranagar,candidate,500.0,24.7
+dev_n,2026-09-22 03:13:00,2026-09-22,3,12.9782,77.6410,11.0,morning_commute,store_c,Store C - Indiranagar,candidate,500.0,31.1
 dev_a,2026-09-22 12:35:00,2026-09-22,12,12.9757,77.6065,7.0,evening_commute,store_a,Store A - MG Road,existing,500.0,16.0
 dev_c,2026-09-22 12:45:00,2026-09-22,12,12.9760,77.6070,11.0,evening_commute,store_a,Store A - MG Road,existing,500.0,62.0
 dev_d,2026-09-22 13:15:00,2026-09-22,13,12.9740,77.6060,15.0,evening_commute,store_a,Store A - MG Road,existing,500.0,190.0

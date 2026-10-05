@@ -4,6 +4,7 @@ import {DashboardHeader} from './components/DashboardHeader';
 import {FootfallTimeline} from './components/FootfallTimeline';
 import {KpiStrip} from './components/KpiStrip';
 import {MobilityMapUnavailable} from './components/MobilityMapUnavailable';
+import {ScenarioComparison} from './components/ScenarioComparison';
 import {ScenarioPanel} from './components/ScenarioPanel';
 import {loadDashboardSnapshot} from './data/dashboardData';
 import type {CannibalizationFlow, DashboardSnapshot, Daypart} from './data/types';
@@ -96,11 +97,20 @@ export default function App() {
     hourSelection?.scenarioId === selectedFlow.scenarioId
       ? hourSelection.hour
       : initialHourForScenario(snapshot, selectedFlow);
+  const selectScenario = (scenarioId: string) => {
+    setSelectedScenarioId(scenarioId);
+    setHourSelection(null);
+  };
 
   return (
     <div className="dashboard-shell">
       <DashboardHeader metadata={snapshot.metadata} />
       <main className="dashboard-main">
+        <ScenarioComparison
+          snapshot={snapshot}
+          selectedFlow={selectedFlow}
+          onScenarioChange={selectScenario}
+        />
         <KpiStrip flow={selectedFlow} />
         <FootfallTimeline
           snapshot={snapshot}
@@ -112,10 +122,7 @@ export default function App() {
           <ScenarioPanel
             snapshot={snapshot}
             selectedFlow={selectedFlow}
-            onScenarioChange={(scenarioId) => {
-              setSelectedScenarioId(scenarioId);
-              setHourSelection(null);
-            }}
+            onScenarioChange={selectScenario}
           />
           {hasMapboxToken ? (
             <Suspense fallback={<div className="map-loading">Loading geospatial renderer…</div>}>

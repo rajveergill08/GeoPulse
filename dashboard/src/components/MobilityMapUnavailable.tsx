@@ -29,6 +29,9 @@ export function MobilityMapUnavailable({
     <section className="map-card" aria-labelledby="map-heading">
       <MobilityMapHeader />
       <div className="map-viewport map-preview">
+        <p className="map-preview__schematic">
+          Schematic comparison · not to scale · link is not an observed route
+        </p>
         <svg
           className="map-preview__link"
           viewBox="0 0 900 520"

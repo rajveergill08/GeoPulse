@@ -6,6 +6,8 @@ with expected as (
     select 'store_a', cast('2026-09-22 18:00:00' as timestamp), 3, 3
     union all
     select 'store_b', cast('2026-09-22 08:00:00' as timestamp), 4, 4
+    union all
+    select 'store_c', cast('2026-09-22 08:00:00' as timestamp), 4, 4
 ),
 
 actual as (

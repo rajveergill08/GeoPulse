@@ -148,6 +148,57 @@ describe('buildKeplerDatasets', () => {
     expect(rows.map((row) => row[6])).toEqual([8, 8, 18]);
   });
 
+  it('switches to the Store C scenario without retaining Store B map rows', () => {
+    const alternateFlow: CannibalizationFlow = {
+      ...flow,
+      scenarioId: 'store-a-store-c',
+      candidateStoreId: 'store_c',
+      candidateStoreUniqueVisitors: 4,
+      sharedVisitors: 0,
+      orderedCandidateToExistingVisitors: 0,
+      incrementalCandidateVisitors: 4,
+      cannibalizationRate: 0,
+      candidateOverlapRate: 0,
+      candidateIncrementalReachRate: 1
+    };
+    const expanded: DashboardSnapshot = {
+      ...snapshot,
+      stores: [
+        ...snapshot.stores,
+        {
+          storeId: 'store_c',
+          storeName: 'Store C',
+          status: 'candidate',
+          latitude: 12.9784,
+          longitude: 77.6408,
+          catchmentRadiusM: 500
+        }
+      ],
+      flows: [...snapshot.flows, alternateFlow],
+      hourlyFootfall: [
+        ...snapshot.hourlyFootfall,
+        {storeId: 'store_c', trafficDateLocal: '2026-09-22', hourLocal: 8, uniqueVisitors: 4, pingCount: 4}
+      ]
+    };
+    const datasets = buildKeplerDatasets(expanded, alternateFlow);
+
+    expect(datasets[0].data.rows.map((row) => row[0])).toEqual(['store_a', 'store_c']);
+    expect(datasets[1].data.rows[0]).toEqual([
+      'store-a-store-c',
+      'Store A',
+      'Store C',
+      12.9756,
+      77.6066,
+      12.9784,
+      77.6408,
+      0,
+      0,
+      'morning_commute',
+      '2026-09-22'
+    ]);
+    expect(datasets[2].data.rows.map((row) => row[0])).toEqual(['store_a', 'store_a', 'store_c']);
+  });
+
   it('configures the hourly point radius from reported unique visitors', () => {
     const layers = KEPLER_MAP_CONFIG.visState?.layers ?? [];
     expect(layers).toHaveLength(3);

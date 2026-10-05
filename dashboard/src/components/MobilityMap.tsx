@@ -1,4 +1,4 @@
-import {addDataToMap, createOrUpdateFilter, wrapTo} from '@kepler.gl/actions';
+import {addDataToMap, createOrUpdateFilter, fitBounds, wrapTo} from '@kepler.gl/actions';
 import KeplerGl from '@kepler.gl/components';
 import {useEffect, useMemo, useRef} from 'react';
 import {useDispatch, useSelector} from 'react-redux';
@@ -6,6 +6,7 @@ import {useDispatch, useSelector} from 'react-redux';
 import type {AppDispatch, RootState} from '../app/store';
 import {buildKeplerDatasets, HOURLY_FOOTFALL_DATASET_ID} from '../data/keplerData';
 import {KEPLER_MAP_CONFIG, KEPLER_THEME} from '../data/keplerConfig';
+import {scenarioMapBounds} from '../data/mapBounds';
 import type {CannibalizationFlow, DashboardSnapshot} from '../data/types';
 import {useElementSize} from '../hooks/useElementSize';
 import {MobilityMapHeader} from './MobilityMapHeader';
@@ -28,6 +29,7 @@ export function MobilityMap({snapshot, flow, selectedHour}: MobilityMapProps) {
     (state: RootState) => state.keplerGl[MAP_ID]?.visState?.datasets?.[HOURLY_FOOTFALL_DATASET_ID]
   );
   const hasLoadedDatasets = useRef(false);
+  const lastFramedScenarioId = useRef<string | null>(null);
   const {elementRef, width, height} = useElementSize<HTMLDivElement>();
   const datasets = useMemo(() => buildKeplerDatasets(snapshot, flow), [snapshot, flow]);
   const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
@@ -54,6 +56,22 @@ export function MobilityMap({snapshot, flow, selectedHour}: MobilityMapProps) {
     );
     hasLoadedDatasets.current = true;
   }, [datasets, dispatch, mapReady]);
+
+  useEffect(() => {
+    if (
+      !mapReady ||
+      !hourlyDataset ||
+      width === 0 ||
+      height === 0 ||
+      lastFramedScenarioId.current === flow.scenarioId
+    ) {
+      return;
+    }
+
+    // Explicit bounds frame the newly selected pair; hour scrubbing never moves the map.
+    lastFramedScenarioId.current = flow.scenarioId;
+    dispatch(wrapTo(MAP_ID, fitBounds(scenarioMapBounds(snapshot, flow))));
+  }, [dispatch, flow, height, hourlyDataset, mapReady, snapshot, width]);
 
   useEffect(() => {
     if (!mapReady || !hasLoadedDatasets.current || !hourlyDataset) {

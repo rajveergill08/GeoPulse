@@ -42,6 +42,12 @@ three shared visitors in this fixture come from pings matched to both catchments
 timestamp, so the fixture has **zero** ordered candidate-to-existing visitors. The 30% overlap
 must not be described as 30% of people intercepted on their way to Store A.
 
+The same synthetic morning also compares Store A with Store C in Indiranagar. Store C has four
+candidate-only visitors and no shared visitors in the fixture, yielding 0% observed overlap and
+100% incremental reach within its own four visitors. This makes the alternative-neighborhood
+workflow testable; it does **not** show that Store C is the better sales location. The tiny,
+synthetic sample has no transaction outcomes or representative citywide coverage.
+
 ## Interpretation guardrails
 
 `cannibalization_rate` is a traffic-at-risk proxy, not a causal estimate of lost sales. A GPS
@@ -73,5 +79,5 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 ```
 
 The suite verifies daypart deduplication, shared-device counting, ordered versus simultaneous
-observations, zero-overlap pairs, exact 30% fixture output, unique model grains, and rates
+observations, both exact Store A/B and A/C fixture outputs, unique model grains, and rates
 constrained to the inclusive `[0, 1]` range.

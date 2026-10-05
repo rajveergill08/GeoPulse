@@ -22,11 +22,19 @@
       "latitude": 12.9719,
       "longitude": 77.607,
       "catchmentRadiusM": 500
+    },
+    {
+      "storeId": "store_c",
+      "storeName": "Store C - Indiranagar",
+      "status": "candidate",
+      "latitude": 12.9784,
+      "longitude": 77.6408,
+      "catchmentRadiusM": 500
     }
   ],
   "flows": [
     {
-      "scenarioId": "store-a-store-b-2026-09-22-morning",
+      "scenarioId": "store_a|store_b|2026-09-22|morning_commute",
       "existingStoreId": "store_a",
       "candidateStoreId": "store_b",
       "trafficDateLocal": "2026-09-22",
@@ -39,6 +47,21 @@
       "cannibalizationRate": 0.3,
       "candidateOverlapRate": 0.75,
       "candidateIncrementalReachRate": 0.25
+    },
+    {
+      "scenarioId": "store_a|store_c|2026-09-22|morning_commute",
+      "existingStoreId": "store_a",
+      "candidateStoreId": "store_c",
+      "trafficDateLocal": "2026-09-22",
+      "daypart": "morning_commute",
+      "existingStoreUniqueVisitors": 10,
+      "candidateStoreUniqueVisitors": 4,
+      "sharedVisitors": 0,
+      "orderedCandidateToExistingVisitors": 0,
+      "incrementalCandidateVisitors": 4,
+      "cannibalizationRate": 0,
+      "candidateOverlapRate": 0,
+      "candidateIncrementalReachRate": 1
     }
   ],
   "hourlyFootfall": [
@@ -51,6 +74,13 @@
     },
     {
       "storeId": "store_b",
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 4,
+      "pingCount": 4
+    },
+    {
+      "storeId": "store_c",
       "trafficDateLocal": "2026-09-22",
       "hourLocal": 8,
       "uniqueVisitors": 4,

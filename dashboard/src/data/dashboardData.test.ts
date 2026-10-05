@@ -69,14 +69,35 @@ function validSnapshot(): DashboardSnapshot {
 }
 
 describe('parseDashboardSnapshot', () => {
-  it('keeps the synthetic public fixture at 30% overlap with zero ordered visitors', () => {
+  it('keeps both synthetic candidate scenarios at their reconciled morning counts', () => {
     const fixtureUrl = new URL('../../public/data/geopulse-dashboard.json', import.meta.url);
     const fixture = parseDashboardSnapshot(JSON.parse(readFileSync(fixtureUrl, 'utf8')) as unknown);
 
+    expect(fixture.metadata.synthetic).toBe(true);
+    expect(fixture.flows).toHaveLength(2);
     expect(fixture.flows[0]).toMatchObject({
+      candidateStoreId: 'store_b',
       sharedVisitors: 3,
       cannibalizationRate: 0.3,
       orderedCandidateToExistingVisitors: 0
+    });
+    expect(fixture.flows[1]).toMatchObject({
+      candidateStoreId: 'store_c',
+      existingStoreUniqueVisitors: 10,
+      candidateStoreUniqueVisitors: 4,
+      sharedVisitors: 0,
+      orderedCandidateToExistingVisitors: 0,
+      incrementalCandidateVisitors: 4,
+      cannibalizationRate: 0,
+      candidateOverlapRate: 0,
+      candidateIncrementalReachRate: 1
+    });
+    expect(fixture.hourlyFootfall).toContainEqual({
+      storeId: 'store_c',
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 4,
+      pingCount: 4
     });
   });
 

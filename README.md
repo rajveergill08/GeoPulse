@@ -94,9 +94,10 @@ dbt build --profiles-dir profiles/ci --target ci --exclude-resource-type seed
 `fct_store_hourly_footfall` distinguishes unique visitors from raw ping volume. The downstream
 `fct_store_cannibalization` model compares existing and proposed catchments by date and daypart;
 the deterministic fixture yields a 30% morning overlap proxy but zero strictly ordered
-candidate-to-existing visitors. See
-`docs/dbt-footfall.md` and `docs/cannibalization.md` for metric definitions, interpretation
-guardrails, and Snowflake execution instructions.
+candidate-to-existing visitors for Store A versus B. A second candidate, Store C, has four
+synthetic morning visitors with no observed overlap in the fixture; neither result predicts
+lost sales or ranks locations. See `docs/dbt-footfall.md` and `docs/cannibalization.md` for metric
+definitions, interpretation guardrails, and Snowflake execution instructions.
 
 ## Orchestrate daily updates
 

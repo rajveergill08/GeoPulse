@@ -14,6 +14,20 @@ with expected as (
         cast(0.3 as double) as cannibalization_rate,
         cast(0.75 as double) as candidate_overlap_rate,
         cast(0.25 as double) as candidate_incremental_reach_rate
+    union all
+    select
+        'store_a',
+        'store_c',
+        cast('2026-09-22' as date),
+        'morning_commute',
+        10,
+        4,
+        0,
+        0,
+        4,
+        cast(0.0 as double),
+        cast(0.0 as double),
+        cast(1.0 as double)
 ),
 
 actual as (
