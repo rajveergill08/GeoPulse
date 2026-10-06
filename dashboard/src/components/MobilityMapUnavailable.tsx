@@ -7,12 +7,14 @@ interface MobilityMapUnavailableProps {
   snapshot: DashboardSnapshot;
   flow: CannibalizationFlow;
   selectedHour: number;
+  isPlaying: boolean;
 }
 
 export function MobilityMapUnavailable({
   snapshot,
   flow,
-  selectedHour
+  selectedHour,
+  isPlaying
 }: MobilityMapUnavailableProps) {
   const existingStore = findStore(snapshot, flow.existingStoreId);
   const candidateStore = findStore(snapshot, flow.candidateStoreId);
@@ -62,7 +64,7 @@ export function MobilityMapUnavailable({
           <span>daypart traffic at risk</span>
         </div>
 
-        <p className="map-preview__hour-note" role="status">
+        <p className="map-preview__hour-note" role={isPlaying ? undefined : 'status'}>
           {String(selectedHour).padStart(2, '0')}:00 · Hourly data reported for {reportedStores} of 2
           selected stores
         </p>

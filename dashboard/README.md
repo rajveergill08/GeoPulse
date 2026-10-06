@@ -64,8 +64,13 @@ zero ordered visitors.
 `metadata.retailTimezone`; `refreshedAt` remains an ISO-8601 UTC timestamp for freshness checks.
 Hourly unique-visitor counts cannot be summed into daily unique reach, because one device can
 appear in several hours. The selected hour changes store footfall evidence, not the
-daypart-level cannibalization denominator. The current snapshot does not include H3 cells or
-device trajectories, so the map is not yet a 3D hexbin or measured route visualization.
+daypart-level cannibalization denominator. The user-started Play control steps through all 24
+local hours, wraps from 23:00 to 00:00, and can be paused. Manual scrubbing, switching candidates,
+or hiding the browser tab pauses playback. Playback is unavailable when the device requests
+reduced motion, but manual scrubbing remains available. The committed synthetic fixture reports
+only 08:00 observations for all three stores and an 18:00 observation for Store A; other hours
+remain "No reported data," not zero or interpolated traffic. The current snapshot does not include
+H3 cells or device trajectories, so the map is not yet a 3D hexbin or measured route visualization.
 
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
 cannibalization fixture: Store B has 3 of 10 overlapping existing visitors (30%), while

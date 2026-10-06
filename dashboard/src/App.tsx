@@ -7,6 +7,7 @@ import {MobilityMapUnavailable} from './components/MobilityMapUnavailable';
 import {ScenarioComparison} from './components/ScenarioComparison';
 import {ScenarioPanel} from './components/ScenarioPanel';
 import {loadDashboardSnapshot} from './data/dashboardData';
+import {nextHour} from './data/hourPlayback';
 import type {CannibalizationFlow, DashboardSnapshot, Daypart} from './data/types';
 
 const MobilityMapBoundary = lazy(() =>
@@ -15,6 +16,14 @@ const MobilityMapBoundary = lazy(() =>
   }))
 );
 const hasMapboxToken = Boolean(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim());
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+const PLAYBACK_INTERVAL_MS = 1000;
+
+function initialReducedMotionPreference(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia(REDUCED_MOTION_QUERY).matches
+    : false;
+}
 
 function isHourInDaypart(hour: number, daypart: Daypart): boolean {
   switch (daypart) {
@@ -47,6 +56,8 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [hourSelection, setHourSelection] = useState<{scenarioId: string; hour: number} | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(initialReducedMotionPreference);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,6 +81,57 @@ export default function App() {
       isActive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY);
+    const onPreferenceChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+      if (event.matches) {
+        setIsPlaying(false);
+      }
+    };
+
+    mediaQuery.addEventListener('change', onPreferenceChange);
+    return () => mediaQuery.removeEventListener('change', onPreferenceChange);
+  }, []);
+
+  useEffect(() => {
+    const pauseWhenHidden = () => {
+      if (document.hidden) {
+        setIsPlaying(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
+  }, []);
+
+  useEffect(() => {
+    if (!isPlaying || prefersReducedMotion || !snapshot || !selectedScenarioId) {
+      return;
+    }
+
+    const flow = snapshot.flows.find((item) => item.scenarioId === selectedScenarioId);
+    if (!flow) {
+      return;
+    }
+
+    const initialHour = initialHourForScenario(snapshot, flow);
+    const timer = window.setInterval(() => {
+      setHourSelection((previous) => ({
+        scenarioId: selectedScenarioId,
+        hour: nextHour(
+          previous?.scenarioId === selectedScenarioId ? previous.hour : initialHour
+        )
+      }));
+    }, PLAYBACK_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [isPlaying, prefersReducedMotion, selectedScenarioId, snapshot]);
 
   if (error) {
     return (
@@ -98,8 +160,13 @@ export default function App() {
       ? hourSelection.hour
       : initialHourForScenario(snapshot, selectedFlow);
   const selectScenario = (scenarioId: string) => {
+    setIsPlaying(false);
     setSelectedScenarioId(scenarioId);
     setHourSelection(null);
+  };
+  const selectHour = (hour: number) => {
+    setIsPlaying(false);
+    setHourSelection({scenarioId: selectedFlow.scenarioId, hour});
   };
 
   return (
@@ -116,7 +183,10 @@ export default function App() {
           snapshot={snapshot}
           flow={selectedFlow}
           selectedHour={selectedHour}
-          onHourChange={(hour) => setHourSelection({scenarioId: selectedFlow.scenarioId, hour})}
+          onHourChange={selectHour}
+          isPlaying={isPlaying}
+          playbackDisabled={prefersReducedMotion}
+          onPlaybackToggle={() => setIsPlaying((current) => !current)}
         />
         <div className="dashboard-grid">
           <ScenarioPanel
@@ -137,6 +207,7 @@ export default function App() {
               snapshot={snapshot}
               flow={selectedFlow}
               selectedHour={selectedHour}
+              isPlaying={isPlaying}
             />
           )}
         </div>

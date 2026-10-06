@@ -7,6 +7,9 @@ interface FootfallTimelineProps {
   flow: CannibalizationFlow;
   selectedHour: number;
   onHourChange: (hour: number) => void;
+  isPlaying: boolean;
+  playbackDisabled: boolean;
+  onPlaybackToggle: () => void;
 }
 
 function formatHour(hour: number): string {
@@ -17,7 +20,10 @@ export function FootfallTimeline({
   snapshot,
   flow,
   selectedHour,
-  onHourChange
+  onHourChange,
+  isPlaying,
+  playbackDisabled,
+  onPlaybackToggle
 }: FootfallTimelineProps) {
   const selectedStores: StoreMetric[] = [
     findStore(snapshot, flow.existingStoreId),
@@ -34,9 +40,24 @@ export function FootfallTimeline({
             {formatTrafficDate(flow.trafficDateLocal)} · {snapshot.metadata.retailTimezone} local time
           </p>
         </div>
-        <output className="footfall-timeline__time" htmlFor="footfall-hour">
-          {formatHour(selectedHour)}
-        </output>
+        <div className="footfall-timeline__controls">
+          <button
+            className="footfall-timeline__playback"
+            type="button"
+            onClick={onPlaybackToggle}
+            disabled={playbackDisabled}
+            aria-describedby="footfall-playback-note"
+          >
+            {isPlaying ? 'Pause playback' : 'Play 24 hours'}
+          </button>
+          <output
+            className="footfall-timeline__time"
+            htmlFor="footfall-hour"
+            aria-live={isPlaying ? 'off' : 'polite'}
+          >
+            {formatHour(selectedHour)}
+          </output>
+        </div>
       </div>
 
       <div className="footfall-timeline__body">
@@ -62,7 +83,11 @@ export function FootfallTimeline({
           </div>
         </div>
 
-        <div className="footfall-timeline__metrics" aria-live="polite" aria-atomic="true">
+        <div
+          className="footfall-timeline__metrics"
+          aria-live={isPlaying ? 'off' : 'polite'}
+          aria-atomic="true"
+        >
           {selectedStores.map((store) => {
             const row = snapshot.hourlyFootfall.find(
               (item) =>
@@ -88,6 +113,12 @@ export function FootfallTimeline({
           })}
         </div>
       </div>
+
+      <p className="footfall-timeline__playback-note" id="footfall-playback-note">
+        {playbackDisabled
+          ? 'Playback is disabled because reduced motion is requested. You can still select any hour manually.'
+          : 'Playback steps through the 24 local hours. Unreported hours remain unreported; manual scrubbing or changing the candidate pauses playback.'}
+      </p>
 
       <p className="footfall-timeline__explanation" id="footfall-explanation">
         The hour filters reported store catchment counts on the map. The overlap risk above is a
