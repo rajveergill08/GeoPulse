@@ -57,6 +57,17 @@ the time of the original GPS observations. The file
 is written to a temporary sibling and atomically replaced only after a complete validated
 snapshot is ready. A failed retry leaves the last complete snapshot untouched.
 
+The configured output is a shared **latest-data-date** snapshot. Publication compares the
+retail-local `trafficDateLocal` of its flows with the date in the existing output under a
+publication lock; it does not compare `refreshedAt`, which becomes newer even when an old day is
+re-exported. A first export, a retry for the same day, or a newer day may replace the file. An
+older logical day, a mixed-date snapshot, or an existing file whose date cannot be established
+fails without replacing the file. To inspect or retain a historical day, export it to a separate
+date-specific `--output` path instead of the shared latest path. Review it before any explicit
+promotion. The guard preserves ordering by observation date; it does not prove source-data
+completeness or compare revisions within the same day. A small sibling `.lock` file is retained
+to coordinate publishers; do not remove it while exports may be running.
+
 ## Scheduled delivery and hosting
 
 The Airflow DAG runs `export_dashboard_snapshot` after the successful dbt build for the same
@@ -66,6 +77,10 @@ logical day. Its default output is
 ignored by Git and is not copied into the committed dashboard fixture automatically. The DAG
 preflight checks that the configured output path has a writable existing parent (or ancestor)
 before starting the expensive generator and spatial join.
+Re-running an old Airflow logical day may rebuild that day's marts, but its export task will fail
+if the shared snapshot already shows a newer day; the newer dashboard file remains untouched.
+Use a separate date-specific output for historical exports rather than rolling back the shared
+dashboard feed.
 
 Serve or upload the synthetic JSON through a read-only static endpoint and set
 `VITE_GEOPULSE_DATA_URL` to its URL before building the dashboard. The browser must have no

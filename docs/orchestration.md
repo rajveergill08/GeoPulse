@@ -201,6 +201,10 @@ real scheduled run. Parsing the DAG does not require a loader command.
   succeeds.
 - A failed dashboard export retains the last complete snapshot. Fix the mart, reference-store
   file, or credentials and retry only `export_dashboard_snapshot`; do not copy a partial file.
+- A shared dashboard snapshot only advances to the same or a newer retail-local data date.
+  Re-running an older logical day does not overwrite a newer dashboard file: its export task
+  fails after the older mart is rebuilt. Use a separate date-specific output when a historical
+  snapshot is needed; `refreshedAt` is export time, not the ordering key.
 - Manual historical runs must use the intended logical date and a loader that can safely replace
   that batch. Automatic catchup stays disabled to prevent an accidental multi-day Spark surge.
 - Keep Snowflake passwords, keys, and tokens in the Airflow secret backend or protected worker

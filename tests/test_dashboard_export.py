@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, date, datetime
@@ -22,6 +23,7 @@ from geopulse.dashboard_export import (
     fetch_aggregate_rows,
     fetch_hourly_rows,
     main,
+    publish_latest_snapshot,
     read_dashboard_connection_settings,
     read_stores,
     write_snapshot_atomically,
@@ -147,6 +149,26 @@ class DashboardExportTests(unittest.TestCase):
         if synthetic:
             args.append("--synthetic")
         return args
+
+    def _snapshot_for_day(
+        self, run_date: date, *, exported_at: datetime | None = None
+    ) -> dict[str, object]:
+        config = DashboardExportConfig(run_date, self.stores_path, self.output_path)
+        return build_snapshot(
+            config,
+            self.stores,
+            [mart_row(traffic_date_local=run_date)],
+            hourly_rows=[
+                hourly_row(traffic_date_local=run_date),
+                hourly_row(
+                    store_id="store_b",
+                    traffic_date_local=run_date,
+                    unique_visitors=4,
+                    ping_count=5,
+                ),
+            ],
+            exported_at=exported_at,
+        )
 
     def test_dbt_mart_is_derived_from_target_schema_not_base_schema(self) -> None:
         self.assertEqual(
@@ -527,15 +549,173 @@ class DashboardExportTests(unittest.TestCase):
 
     def test_atomic_replace_retains_previous_file_on_failure_and_cleans_temp(self) -> None:
         self.output_path.parent.mkdir()
-        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        previous = self._snapshot_for_day(date(2026, 9, 29))
+        self.output_path.write_text(json.dumps(previous), encoding="utf-8")
         snapshot = build_snapshot(self.config, self.stores, [mart_row()])
         with patch("geopulse.dashboard_export.os.replace", side_effect=OSError("disk failed")):
             with self.assertRaises(OSError):
                 write_snapshot_atomically(self.output_path, snapshot)
-        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
+        self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), previous)
         self.assertEqual(list(self.output_path.parent.glob("*.tmp")), [])
         write_snapshot_atomically(self.output_path, snapshot)
         self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), snapshot)
+
+    def test_latest_publication_allows_first_same_day_retry_and_newer_day(self) -> None:
+        first = self._snapshot_for_day(
+            date(2026, 9, 29), exported_at=datetime(2026, 9, 29, 12, tzinfo=UTC)
+        )
+        previous_day_config = DashboardExportConfig(
+            date(2026, 9, 29), self.stores_path, self.output_path
+        )
+        publish_latest_snapshot(previous_day_config, first)
+        self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), first)
+
+        retry = self._snapshot_for_day(
+            date(2026, 9, 29), exported_at=datetime(2026, 9, 29, 11, tzinfo=UTC)
+        )
+        publish_latest_snapshot(previous_day_config, retry)
+        self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), retry)
+
+        newer = self._snapshot_for_day(date(2026, 9, 30))
+        publish_latest_snapshot(self.config, newer)
+        self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), newer)
+
+    def test_latest_publication_rejects_older_day_even_with_later_refresh_time(self) -> None:
+        current = self._snapshot_for_day(
+            date(2026, 10, 1), exported_at=datetime(2026, 10, 1, 12, tzinfo=UTC)
+        )
+        self.output_path.parent.mkdir()
+        self.output_path.write_text(json.dumps(current), encoding="utf-8")
+        original_bytes = self.output_path.read_bytes()
+        historical = self._snapshot_for_day(
+            date(2026, 9, 30), exported_at=datetime(2026, 10, 2, 12, tzinfo=UTC)
+        )
+
+        with self.assertRaises(DashboardExportError):
+            publish_latest_snapshot(self.config, historical)
+
+        self.assertEqual(self.output_path.read_bytes(), original_bytes)
+        self.assertEqual(list(self.output_path.parent.glob("*.tmp")), [])
+
+    def test_latest_publication_rejects_malformed_or_mixed_day_existing_snapshot(self) -> None:
+        existing = self._snapshot_for_day(date(2026, 9, 29))
+        mixed = json.loads(json.dumps(existing))
+        other_flow = dict(mixed["flows"][0])
+        other_flow["trafficDateLocal"] = "2026-09-30"
+        mixed["flows"].append(other_flow)
+        mixed_hourly = json.loads(json.dumps(existing))
+        mixed_hourly["hourlyFootfall"][0]["trafficDateLocal"] = "2026-09-30"
+        incoming = self._snapshot_for_day(date(2026, 9, 30))
+        self.output_path.parent.mkdir()
+
+        for content in (
+            "{not-json",
+            json.dumps({"metadata": {}}),
+            json.dumps(mixed),
+            json.dumps(mixed_hourly),
+        ):
+            with self.subTest(content=content[:40]):
+                self.output_path.write_text(content, encoding="utf-8")
+                original_bytes = self.output_path.read_bytes()
+                with self.assertRaises(DashboardExportError):
+                    publish_latest_snapshot(self.config, incoming)
+                self.assertEqual(self.output_path.read_bytes(), original_bytes)
+                self.assertEqual(list(self.output_path.parent.glob("*.tmp")), [])
+
+    def test_latest_publication_rejects_incoming_day_or_timezone_mismatch(self) -> None:
+        existing = self._snapshot_for_day(date(2026, 9, 29))
+        self.output_path.parent.mkdir()
+        self.output_path.write_text(json.dumps(existing), encoding="utf-8")
+        original_bytes = self.output_path.read_bytes()
+        incoming = self._snapshot_for_day(date(2026, 9, 30))
+
+        for section, field, value in (
+            ("flows", "trafficDateLocal", "2026-09-29"),
+            ("hourlyFootfall", "trafficDateLocal", "2026-09-29"),
+            ("metadata", "retailTimezone", "UTC"),
+        ):
+            with self.subTest(section=section):
+                invalid = json.loads(json.dumps(incoming))
+                if section == "metadata":
+                    invalid[section][field] = value
+                else:
+                    invalid[section][0][field] = value
+                with self.assertRaises(DashboardExportError):
+                    publish_latest_snapshot(self.config, invalid)
+                self.assertEqual(self.output_path.read_bytes(), original_bytes)
+
+    def test_concurrent_publishers_cannot_let_older_day_win(self) -> None:
+        older = self._snapshot_for_day(date(2026, 9, 30))
+        newer_config = DashboardExportConfig(date(2026, 10, 1), self.stores_path, self.output_path)
+        newer = self._snapshot_for_day(date(2026, 10, 1))
+        older_in_write = threading.Event()
+        release_older = threading.Event()
+        newer_started = threading.Event()
+        newer_finished = threading.Event()
+        errors: list[Exception] = []
+        real_write = write_snapshot_atomically
+
+        def blocked_write(path: Path, snapshot: dict[str, object]) -> None:
+            if snapshot["flows"][0]["trafficDateLocal"] == "2026-09-30":
+                older_in_write.set()
+                if not release_older.wait(10):
+                    raise RuntimeError("Older publisher was not released")
+            real_write(path, snapshot)
+
+        def publish_older() -> None:
+            try:
+                publish_latest_snapshot(self.config, older)
+            except Exception as exc:
+                errors.append(exc)
+
+        def publish_newer() -> None:
+            newer_started.set()
+            try:
+                publish_latest_snapshot(newer_config, newer)
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                newer_finished.set()
+
+        old_thread = threading.Thread(target=publish_older, daemon=True)
+        new_thread = threading.Thread(target=publish_newer, daemon=True)
+        with patch(
+            "geopulse.dashboard_export.write_snapshot_atomically", side_effect=blocked_write
+        ):
+            try:
+                old_thread.start()
+                self.assertTrue(older_in_write.wait(5))
+                new_thread.start()
+                self.assertTrue(newer_started.wait(5))
+                self.assertFalse(newer_finished.wait(0.5))
+            finally:
+                release_older.set()
+                old_thread.join(10)
+                if new_thread.ident is not None:
+                    new_thread.join(10)
+
+        self.assertFalse(old_thread.is_alive())
+        self.assertFalse(new_thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(json.loads(self.output_path.read_text(encoding="utf-8")), newer)
+
+    def test_historical_day_can_publish_to_date_specific_output(self) -> None:
+        current = self._snapshot_for_day(date(2026, 10, 1))
+        publish_latest_snapshot(
+            DashboardExportConfig(date(2026, 10, 1), self.stores_path, self.output_path),
+            current,
+        )
+        shared_bytes = self.output_path.read_bytes()
+        historical_path = self.root / "historical" / "dashboard-2026-09-29.json"
+        historical_config = DashboardExportConfig(
+            date(2026, 9, 29), self.stores_path, historical_path
+        )
+        historical = self._snapshot_for_day(date(2026, 9, 29))
+
+        publish_latest_snapshot(historical_config, historical)
+
+        self.assertEqual(self.output_path.read_bytes(), shared_bytes)
+        self.assertEqual(json.loads(historical_path.read_text(encoding="utf-8")), historical)
 
     def test_cli_success_writes_synthetic_snapshot_and_closes_session(self) -> None:
         connection = FakeConnection()
@@ -557,6 +737,26 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(len(snapshot["hourlyFootfall"]), 2)
         self.assertEqual(len(connection.statements), 2)
         self.assertEqual(json.loads(output.getvalue())["hourly_footfall_count"], 2)
+
+    def test_cli_historical_run_cannot_replace_newer_shared_snapshot(self) -> None:
+        current = self._snapshot_for_day(date(2026, 10, 1))
+        self.output_path.parent.mkdir()
+        self.output_path.write_text(json.dumps(current), encoding="utf-8")
+        original_bytes = self.output_path.read_bytes()
+        connection = FakeConnection()
+        error = StringIO()
+
+        with (
+            patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stderr(error),
+        ):
+            self.assertEqual(main(self._args()), 1)
+
+        self.assertTrue(connection.closed)
+        self.assertEqual(self.output_path.read_bytes(), original_bytes)
+        self.assertEqual(list(self.output_path.parent.glob("*.tmp")), [])
+        self.assertNotIn("secret-password", error.getvalue())
 
     def test_cli_rejects_real_data_without_privacy_review_before_connect(self) -> None:
         self.output_path.parent.mkdir()

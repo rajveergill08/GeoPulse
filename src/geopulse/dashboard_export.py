@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import json
 import os
 import re
 import sys
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+import time
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +65,7 @@ HOURLY_COLUMNS = (
 DAYPARTS = frozenset({"morning_commute", "midday", "evening_commute", "off_peak"})
 RATE_TOLERANCE = Decimal("0.000001")  # dbt rounds rates to six decimal places.
 MAX_SAFE_JS_INTEGER = 2**53 - 1
+PUBLICATION_LOCK_TIMEOUT_SECONDS = 30
 
 
 class DashboardExportError(ValueError):
@@ -491,6 +496,115 @@ def write_snapshot_atomically(output_path: Path, snapshot: Mapping[str, Any]) ->
             temporary_path.unlink(missing_ok=True)
 
 
+def _snapshot_retail_date(snapshot: object, retail_timezone: str) -> date:
+    """Return the one data date represented by an aggregate dashboard snapshot."""
+
+    if not isinstance(snapshot, Mapping):
+        raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
+    metadata = snapshot.get("metadata")
+    flows = snapshot.get("flows")
+    hourly = snapshot.get("hourlyFootfall")
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("retailTimezone") != retail_timezone
+        or not isinstance(flows, list)
+        or not flows
+        or not isinstance(hourly, list)
+    ):
+        raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
+
+    traffic_dates: set[date] = set()
+    for row in chain(flows, hourly):
+        if not isinstance(row, Mapping):
+            raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
+        value = row.get("trafficDateLocal")
+        if not isinstance(value, str) or not DATE_PATTERN.fullmatch(value):
+            raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
+        try:
+            traffic_dates.add(date.fromisoformat(value))
+        except ValueError as exc:
+            raise DashboardExportError("Dashboard snapshot has no unambiguous retail date") from exc
+    if len(traffic_dates) != 1:
+        raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
+    return next(iter(traffic_dates))
+
+
+@contextmanager
+def _publication_lock(output_path: Path) -> Iterator[None]:
+    """Serialize independent publishers of the same output on Windows and POSIX."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the sibling lock file: removing it while another process waits can split the lock.
+    lock_path = output_path.with_name(f".{output_path.name}.lock")
+    with lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+
+            def acquire() -> None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+            def release() -> None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+        else:
+            import fcntl
+
+            def acquire() -> None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            def release() -> None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+        deadline = time.monotonic() + PUBLICATION_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                acquire()
+                break
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+                if time.monotonic() >= deadline:
+                    raise DashboardExportError(
+                        "Timed out waiting for the dashboard publication lock"
+                    ) from exc
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            release()
+
+
+def publish_latest_snapshot(config: DashboardExportConfig, snapshot: Mapping[str, Any]) -> None:
+    """Publish only if the requested retail day does not roll this output backward."""
+
+    incoming_date = _snapshot_retail_date(snapshot, config.retail_timezone)
+    if incoming_date != config.run_date:
+        raise DashboardExportError("Dashboard snapshot date differs from the requested run date")
+
+    with _publication_lock(config.output_path):
+        if config.output_path.exists() or config.output_path.is_symlink():
+            try:
+                existing = json.loads(config.output_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                raise DashboardExportError(
+                    "Existing dashboard snapshot is unreadable; refusing to replace it"
+                ) from exc
+            existing_date = _snapshot_retail_date(existing, config.retail_timezone)
+            if incoming_date < existing_date:
+                raise DashboardExportError(
+                    "An older retail day cannot replace this dashboard snapshot; "
+                    "use a date-specific output path for backfills"
+                )
+        write_snapshot_atomically(config.output_path, snapshot)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Export a validated Snowflake dashboard snapshot.")
     parser.add_argument("--run-date", required=True, type=_run_date)
@@ -526,7 +640,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         rows = fetch_aggregate_rows(connection, config)
         hourly_rows = fetch_hourly_rows(connection, config)
         snapshot = build_snapshot(config, stores, rows, hourly_rows=hourly_rows)
-        write_snapshot_atomically(config.output_path, snapshot)
+        publish_latest_snapshot(config, snapshot)
         print(
             json.dumps(
                 {
