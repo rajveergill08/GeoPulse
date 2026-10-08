@@ -17,6 +17,8 @@ The current implementation provides:
 - A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
+- An internal resolution-8 H3 hourly mart derived from raw `GEOGRAPHY` pings, with synthetic
+  fixture tests for distinct-device counts and retail-local day boundaries.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A separate sequence-aware diagnostic that excludes same-ping catchment overlap from ordered
   candidate-to-existing visitor evidence.
@@ -141,9 +143,10 @@ and retry rules.
 The dashboard requires Node.js 20.19 or newer. It starts with a synthetic, aggregated fixture so
 the full decision workflow can be evaluated without browser access to Snowflake credentials.
 The hour selector shows observed per-store footfall for one local hour; it does not recalculate
-the separate daypart cannibalization ratio or infer a device route. H3 hexbins remain a later
-spatial-aggregation milestone. The exporter is synthetic-only until real-data small-cell and
-access controls receive a separate privacy review.
+the separate daypart cannibalization ratio or infer a device route. The H3 aggregation mart now
+exists, but the browser's 3D H3 layer and export wiring remain a later milestone. The exporter
+is synthetic-only until real-data small-cell and access controls receive a separate privacy
+review.
 
 ```powershell
 Set-Location dashboard

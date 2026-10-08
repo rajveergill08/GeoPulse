@@ -1,6 +1,21 @@
 version: 2
 
 sources:
+  - name: raw
+    description: Canonical mobility pings before the many-to-many store catchment join.
+    schema: "{{ 'main' if target.type == 'duckdb' else env_var('DBT_SNOWFLAKE_RAW_SCHEMA', 'RAW') }}"
+    tables:
+      - name: mobile_pings
+        description: >-
+          Snowflake RAW.MOBILE_PINGS has a GEOGRAPHY point per ping. The DuckDB CI seed
+          substitutes genuine precomputed H3 IDs only to exercise hourly aggregation;
+          it does not test Snowflake's geography-to-H3 conversion.
+        columns:
+          - name: device_id
+            data_tests: [not_null]
+          - name: event_ts
+            data_tests: [not_null]
+
   - name: spatial
     description: Validated point-to-catchment matches produced by the Apache Sedona job.
     schema: "{{ 'main' if target.type == 'duckdb' else env_var('DBT_SNOWFLAKE_SOURCE_SCHEMA', 'SPATIAL') }}"

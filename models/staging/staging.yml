@@ -1,6 +1,16 @@
 version: 2
 
 models:
+  - name: stg_h3_ping_cells
+    description: Canonical raw pings indexed to resolution-8 H3 cells before catchment joins.
+    columns:
+      - name: device_id
+        data_tests: [not_null]
+      - name: event_ts_utc
+        data_tests: [not_null]
+      - name: hex_id
+        data_tests: [not_null]
+
   - name: stg_ping_store_matches
     description: Cleaned and deduplicated mobility pings matched to store catchments.
     columns:
