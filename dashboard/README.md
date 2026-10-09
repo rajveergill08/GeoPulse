@@ -45,6 +45,9 @@ The endpoint returns one snapshot with:
   incremental visitors, and three rates expressed from 0 to 1.
 - `hourlyFootfall`: reported store-hour observations with local hour (0–23), distinct visitors
   in that hour, and ping count. Missing store-hours are not silently treated as zero.
+- `h3Footfall` (optional for older snapshots): citywide, resolution-8 H3 cell-hour aggregates
+  with `hexId`, `h3Resolution`, `trafficDateLocal`, `hourLocal`, `uniqueVisitors`, and
+  `pingCount`. These are derived from GPS pings, not assigned to stores or observed paths.
 
 Every flow must reference stores in the same response. Visitor counts must be non-negative,
 JavaScript-safe integers; shared visitors cannot exceed either store's visitors, and incremental
@@ -53,6 +56,10 @@ zero and shared visitors. Each rate must agree with its visitor counts to the db
 six-decimal precision, and candidate overlap plus incremental
 reach must equal 100% within that tolerance. The client rejects a snapshot that breaks these
 rules instead of displaying misleading metrics.
+When H3 rows are present, the client also checks their canonical lowercase resolution-8
+identifiers, dates, hours, nonzero safe-integer counts, unique cell/date/hour grain, and
+absence of extra fields such as device identifiers. H3 rows must belong to a date used by
+a scenario, but they are not filtered to a selected store pair.
 
 The ordered count requires a candidate-only GPS match strictly before a separate
 existing-only match in the same local date/daypart. Simultaneous matches to both catchments do
@@ -63,20 +70,26 @@ zero ordered visitors.
 `trafficDateLocal`, the 24-hour scrubber, and all displayed dayparts use
 `metadata.retailTimezone`; `refreshedAt` remains an ISO-8601 UTC timestamp for freshness checks.
 Hourly unique-visitor counts cannot be summed into daily unique reach, because one device can
-appear in several hours. The selected hour changes store footfall evidence, not the
+appear in several hours. H3 cell-hour visitors likewise cannot be summed across cells or hours
+into unique reach: a device may appear in multiple cells or hours. The selected hour changes
+both the reported store catchment points and citywide H3 cells, not the
 daypart-level cannibalization denominator. The user-started Play control steps through all 24
 local hours, wraps from 23:00 to 00:00, and can be paused. Manual scrubbing, switching candidates,
 or hiding the browser tab pauses playback. Playback is unavailable when the device requests
 reduced motion, but manual scrubbing remains available. The committed synthetic fixture reports
 only 08:00 observations for all three stores and an 18:00 observation for Store A; other hours
-remain "No reported data," not zero or interpolated traffic. The current snapshot does not include
-H3 cells or device trajectories, so the map is not yet a 3D hexbin or measured route visualization.
+remain "No reported data," not zero or interpolated traffic. The synthetic fixture includes
+citywide H3 observations at 08:00, 18:00, and 23:00. With a Mapbox token, Kepler.gl renders
+those real H3 cell identifiers as extruded 3D columns scaled by hourly distinct visitors.
+This is a citywide mobility-density layer, not catchment traffic, a measured route, or a
+prediction of store sales. It shows no cells for hours without reported H3 data.
 
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
 cannibalization fixture: Store B has 3 of 10 overlapping existing visitors (30%), while
 Store C has 0 of 10 observed overlap and 4 of 4 candidate-only visitors in the same morning
 window. Zero observed overlap is not proof of no movement or sales impact. The no-token map
-preview is schematic and not to scale; the interactive map frames each selected store pair.
+preview is schematic and not to scale; it does not render H3 cells. The interactive map frames
+each selected store pair and overlays the same citywide H3 observations for either candidate.
 Its refresh timestamp is fixed evidence,
 not a claim that live data is connected. The scheduled exporter writes outside the source tree,
 so deployment must copy or serve its output; it never silently replaces the committed sample.

@@ -17,13 +17,13 @@ The current implementation provides:
 - A PySpark/Apache Sedona job that validates pings and builds metric store catchments.
 - A broadcast spatial intersection join with Parquet matches, rejects, and audit metrics.
 - Snowflake-ready dbt models for retail-local hourly visitors, ping volume, and traffic dayparts.
-- An internal resolution-8 H3 hourly mart derived from raw `GEOGRAPHY` pings, with synthetic
-  fixture tests for distinct-device counts and retail-local day boundaries.
+- A resolution-8 H3 hourly mart derived from raw `GEOGRAPHY` pings, with a synthetic-only export
+  and fixture checks for distinct-device counts and retail-local day boundaries.
 - Store-pair cannibalization metrics for shared visitors, traffic at risk, and incremental reach.
 - A separate sequence-aware diagnostic that excludes same-ping catchment overlap from ordered
   candidate-to-existing visitor evidence.
 - A React/Kepler.gl decision dashboard with KPI cards, scenario selection, store-pair links,
-  and a retail-local hourly footfall scrubber.
+  a retail-local hourly footfall scrubber, and 3D H3 cells for observed citywide pings.
 - A timezone-aware Airflow DAG with retry-safe partitions and a fail-closed spatial quality gate.
 - A Snowflake batch publisher that validates staged rows and replaces one retail day atomically.
 - A read-only dashboard exporter that publishes validated aggregate mart results as an atomic JSON snapshot.
@@ -142,11 +142,10 @@ and retry rules.
 
 The dashboard requires Node.js 20.19 or newer. It starts with a synthetic, aggregated fixture so
 the full decision workflow can be evaluated without browser access to Snowflake credentials.
-The hour selector shows observed per-store footfall for one local hour; it does not recalculate
-the separate daypart cannibalization ratio or infer a device route. The H3 aggregation mart now
-exists, but the browser's 3D H3 layer and export wiring remain a later milestone. The exporter
-is synthetic-only until real-data small-cell and access controls receive a separate privacy
-review.
+The hour selector shows observed per-store footfall and citywide H3 cell footfall for one local
+hour; it does not recalculate the separate daypart cannibalization ratio or infer a device route.
+H3 cells are not attributed to individual stores. The exporter is synthetic-only until real-data
+small-cell and access controls receive a separate privacy review.
 
 ```powershell
 Set-Location dashboard

@@ -4,6 +4,7 @@ import {KEPLER_MAP_CONFIG} from './keplerConfig';
 import {
   buildKeplerDatasets,
   FLOWS_DATASET_ID,
+  H3_FOOTFALL_DATASET_ID,
   HOURLY_FOOTFALL_DATASET_ID,
   STORES_DATASET_ID
 } from './keplerData';
@@ -74,17 +75,36 @@ const snapshot: DashboardSnapshot = {
       uniqueVisitors: 3,
       pingCount: 3
     }
+  ],
+  h3Footfall: [
+    {
+      hexId: '8861892e9bfffff',
+      h3Resolution: 8,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 2,
+      pingCount: 3
+    },
+    {
+      hexId: '8861892e9dfffff',
+      h3Resolution: 8,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 18,
+      uniqueVisitors: 1,
+      pingCount: 1
+    }
   ]
 };
 
 describe('buildKeplerDatasets', () => {
-  it('creates static stores, an overlap link, and all reported hours for the scenario', () => {
+  it('creates stores, an overlap link, catchment hours, and citywide H3 cells', () => {
     const datasets = buildKeplerDatasets(snapshot, flow);
 
     expect(datasets.map((dataset) => dataset.info.id)).toEqual([
       STORES_DATASET_ID,
       FLOWS_DATASET_ID,
-      HOURLY_FOOTFALL_DATASET_ID
+      HOURLY_FOOTFALL_DATASET_ID,
+      H3_FOOTFALL_DATASET_ID
     ]);
     expect(datasets[0].data.rows).toHaveLength(2);
     expect(datasets[1].info.label).toContain('not observed paths');
@@ -106,12 +126,18 @@ describe('buildKeplerDatasets', () => {
       ['store_b', 'Store B', 'proposed', 12.9719, 77.607, '2026-09-22', 8, 4, 4],
       ['store_a', 'Store A', 'existing', 12.9756, 77.6066, '2026-09-22', 18, 3, 3]
     ]);
+    expect(datasets[3].info.label).toContain('not store visits');
+    expect(datasets[3].data.rows).toEqual([
+      ['8861892e9bfffff', 8, '2026-09-22', 8, 2, 3],
+      ['8861892e9dfffff', 8, '2026-09-22', 18, 1, 1]
+    ]);
   });
 
   it('uses coordinate field names that Kepler.gl can detect', () => {
     const datasets = buildKeplerDatasets(snapshot, flow);
     const flowFields = datasets[1].data.fields.map((field) => field.name);
     const hourlyFields = datasets[2].data.fields.map((field) => field.name);
+    const h3Fields = datasets[3].data.fields;
 
     expect(flowFields).toEqual(
       expect.arrayContaining([
@@ -125,6 +151,8 @@ describe('buildKeplerDatasets', () => {
     expect(hourlyFields).toEqual(
       expect.arrayContaining(['latitude', 'longitude', 'hour_local', 'unique_visitors'])
     );
+    expect(h3Fields[0]).toMatchObject({name: 'hex_id', type: 'h3'});
+    expect(h3Fields.map((field) => field.name)).not.toContain('device_id');
   });
 
   it('filters other stores and dates without manufacturing missing-hour rows', () => {
@@ -139,6 +167,10 @@ describe('buildKeplerDatasets', () => {
         ...snapshot.hourlyFootfall,
         {storeId: 'store_c', trafficDateLocal: '2026-09-22', hourLocal: 8, uniqueVisitors: 2, pingCount: 3},
         {storeId: 'store_a', trafficDateLocal: '2026-09-23', hourLocal: 8, uniqueVisitors: 1, pingCount: 1}
+      ],
+      h3Footfall: [
+        ...snapshot.h3Footfall!,
+        {hexId: '8861892e9bfffff', h3Resolution: 8, trafficDateLocal: '2026-09-23', hourLocal: 8, uniqueVisitors: 1, pingCount: 1}
       ]
     };
     const rows = buildKeplerDatasets(extended, flow)[2].data.rows;
@@ -146,6 +178,7 @@ describe('buildKeplerDatasets', () => {
     expect(rows).toHaveLength(3);
     expect(rows.map((row) => row[0])).toEqual(['store_a', 'store_b', 'store_a']);
     expect(rows.map((row) => row[6])).toEqual([8, 8, 18]);
+    expect(buildKeplerDatasets(extended, flow)[3].data.rows).toHaveLength(2);
   });
 
   it('switches to the Store C scenario without retaining Store B map rows', () => {
@@ -197,11 +230,33 @@ describe('buildKeplerDatasets', () => {
       '2026-09-22'
     ]);
     expect(datasets[2].data.rows.map((row) => row[0])).toEqual(['store_a', 'store_a', 'store_c']);
+    expect(datasets[3].data.rows).toEqual(buildKeplerDatasets(snapshot, flow)[3].data.rows);
+  });
+
+  it('emits an empty H3 dataset for a legacy snapshot without cells', () => {
+    const legacy = {...snapshot, h3Footfall: undefined};
+    const datasets = buildKeplerDatasets(legacy, flow);
+
+    expect(datasets[3].info.id).toBe(H3_FOOTFALL_DATASET_ID);
+    expect(datasets[3].data.rows).toEqual([]);
   });
 
   it('configures the hourly point radius from reported unique visitors', () => {
     const layers = KEPLER_MAP_CONFIG.visState?.layers ?? [];
-    expect(layers).toHaveLength(3);
+    expect(layers).toHaveLength(4);
+    expect(layers.find((layer) => layer.id === 'geopulse-h3-footfall-layer')).toMatchObject({
+      type: 'hexagonId',
+      config: {
+        dataId: H3_FOOTFALL_DATASET_ID,
+        columns: {hex_id: 'hex_id'},
+        isVisible: true,
+        visConfig: {enable3d: true}
+      },
+      visualChannels: {
+        sizeField: {name: 'unique_visitors', type: 'integer'},
+        sizeScale: 'linear'
+      }
+    });
     expect(layers.find((layer) => layer.id === 'geopulse-hourly-footfall-layer')).toMatchObject({
       type: 'point',
       config: {

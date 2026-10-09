@@ -2,6 +2,7 @@ import type {addDataToMap} from '@kepler.gl/actions';
 
 import {
   FLOWS_DATASET_ID,
+  H3_FOOTFALL_DATASET_ID,
   HOURLY_FOOTFALL_DATASET_ID,
   STORES_DATASET_ID
 } from './keplerData';
@@ -13,6 +14,32 @@ export const KEPLER_MAP_CONFIG: ParsedKeplerMapConfig = {
   visState: {
     filters: [],
     layers: [
+      {
+        id: 'geopulse-h3-footfall-layer',
+        type: 'hexagonId',
+        config: {
+          dataId: H3_FOOTFALL_DATASET_ID,
+          label: 'Citywide H3 visitors (not store visits)',
+          color: [47, 206, 141],
+          columns: {hex_id: 'hex_id'},
+          isVisible: true,
+          visConfig: {
+            opacity: 0.7,
+            coverage: 0.85,
+            enable3d: true,
+            filled: true,
+            outline: false,
+            elevationScale: 5,
+            sizeRange: [0, 500]
+          }
+        },
+        visualChannels: {
+          colorField: {name: 'unique_visitors', type: 'integer'},
+          colorScale: 'quantile',
+          sizeField: {name: 'unique_visitors', type: 'integer'},
+          sizeScale: 'linear'
+        }
+      },
       {
         id: 'geopulse-store-reference-layer',
         type: 'point',

@@ -2,7 +2,7 @@
 
 GeoPulse keeps Snowflake credentials on the worker. The dashboard reads a JSON snapshot, not
 the warehouse: after dbt builds its marts, `geopulse-export-dashboard` selects the requested
-retail-local date from the aggregate cannibalization and hourly-footfall marts, then combines
+retail-local date from the aggregate cannibalization, store-hour, and H3-hour marts, then combines
 those results with the approved store reference CSV. No device identifier or raw GPS point is
 queried for this export.
 
@@ -15,7 +15,7 @@ Use either `DBT_SNOWFLAKE_PASSWORD` or the private-key file settings documented 
 `docs/warehouse-loading.md`. Do not place credentials in the command, JSON file, or frontend.
 Set `GEOPULSE_DASHBOARD_SNOWFLAKE_ROLE` to a dedicated read-only role if you want the export
 session to use a narrower role than the dbt transformation role. That role needs warehouse,
-database, and mart-schema usage plus `SELECT` on both the cannibalization and hourly-footfall
+database, and mart-schema usage plus `SELECT` on the cannibalization, store-hour, and H3-hour
 marts.
 The repository's default dbt target is password-based; a key-only scheduled deployment also
 needs a key-pair dbt target/profile configured before the `build_dbt_analytics` task can run.
@@ -30,39 +30,47 @@ geopulse-export-dashboard \
 
 `--synthetic` labels an export based on generated mobility data and is currently required.
 The exporter rejects a run without it before connecting to Snowflake. This is a synthetic-only
-project feature, not approval to publish real store-hour cohorts or daypart overlaps. Real
-mobility publication needs a reviewed small-cell suppression, retention, and access policy
+project feature, not approval to publish real H3 cells, store-hour cohorts, or daypart overlaps.
+Real mobility publication needs a reviewed small-cell suppression, retention, and access policy
 first; do not mark real data as synthetic. The flag is an operator assertion, not independent
-proof of data provenance. The date is supplied as a bound query value,
-not interpolated into SQL. The exporter reads the `FCT_STORE_CANNIBALIZATION` and
-`FCT_STORE_HOURLY_FOOTFALL` marts in
-`GEOPULSE.ANALYTICS_MARTS` by default. The `ANALYTICS_MARTS` suffix comes from dbt's target
+proof of data provenance. The date is supplied as a bound query value, not interpolated into SQL.
+The exporter reads the `FCT_STORE_CANNIBALIZATION`, `FCT_STORE_HOURLY_FOOTFALL`, and
+`FCT_H3_HOURLY_FOOTFALL` marts in `GEOPULSE.ANALYTICS_MARTS` by default. The
+`ANALYTICS_MARTS` suffix comes from dbt's target
 schema `ANALYTICS` plus the project's `+schema: marts` setting, following [dbt's default
 custom-schema naming](https://docs.getdbt.com/docs/build/custom-schemas). If your target
 schema differs, set the same `DBT_SNOWFLAKE_SCHEMA` value for dbt and the export worker.
 
-The output follows the existing `dashboard/src/data/types.ts` contract: UTC refresh time,
+The output follows the `dashboard/src/data/types.ts` contract: UTC refresh time,
 retail timezone, approved store coordinates, daily store-pair/daypart overlap metrics, and
 the ordered candidate-to-existing observation count, plus reported per-store/per-hour footfall.
+It also includes `h3Footfall`: citywide resolution-8 H3 cell-hour observations with hexadecimal
+`hexId`, `h3Resolution`, `trafficDateLocal`, `hourLocal`, `uniqueVisitors`, and `pingCount`. No
+device identifiers or raw coordinates enter this feed. The H3 counts come from raw pings before
+store-catchment joins, so one device can appear in several cells or hours; summing cell-hour
+unique visitors is not a distinct daily citywide visitor count. H3 cells are not measured
+store-to-store paths. The exporter selects only the requested local date, caps the day at 50,000
+rows, and rejects an oversized feed rather than silently truncating it.
 The ordered count must be a non-negative, JavaScript-safe integer no larger than shared visitors;
 it is a daypart diagnostic, not an observed route or causal diversion rate. Hourly
 `uniqueVisitors` counts distinct devices within that store-hour only: adding them across hours
-would double-count repeat visitors. An absent
-store-hour remains unreported, not an inferred zero. A date with no comparison rows, missing
-hourly coverage for a compared store, an unknown store, duplicate store-hour, inconsistent
-visitor math, invalid rates, unsafe-large counts, or conflicting timezones fails instead of
-producing a misleading dashboard. This project's retail timezone is fixed to `Asia/Kolkata`; a conflicting
-`GEOPULSE_RETAIL_TIMEZONE` setting fails closed. `refreshedAt` records export time in UTC, not
-the time of the original GPS observations. The file
-is written to a temporary sibling and atomically replaced only after a complete validated
-snapshot is ready. A failed retry leaves the last complete snapshot untouched.
+would double-count repeat visitors. An absent store-hour remains unreported, not an inferred
+zero. A date with no comparison rows, missing hourly coverage for a compared store, no H3
+observations, an unknown store, duplicate store-hour
+or H3 cell-hour, inconsistent visitor math, invalid rates, unsafe-large counts, or
+conflicting timezones fails instead of producing a misleading dashboard. This project's retail
+timezone is fixed to `Asia/Kolkata`; a conflicting `GEOPULSE_RETAIL_TIMEZONE` setting fails
+closed. `refreshedAt` records export time in UTC, not the time of the original GPS observations.
+The file is written to a temporary sibling and atomically replaced only after a complete
+validated snapshot is ready. A failed retry leaves the last complete snapshot untouched.
 
 The configured output is a shared **latest-data-date** snapshot. Publication compares the
-retail-local `trafficDateLocal` of its flows with the date in the existing output under a
-publication lock; it does not compare `refreshedAt`, which becomes newer even when an old day is
-re-exported. A first export, a retry for the same day, or a newer day may replace the file. An
-older logical day, a mixed-date snapshot, or an existing file whose date cannot be established
-fails without replacing the file. To inspect or retain a historical day, export it to a separate
+retail-local `trafficDateLocal` across flows, store-hour footfall, and H3 footfall with the date
+in the existing output under a publication lock; it does not compare `refreshedAt`, which
+becomes newer even when an old day is re-exported. A first export, a retry for the same day, or
+a newer day may replace the file. An older logical day, a mixed-date snapshot, or an existing
+file whose date cannot be established fails without replacing the file. To inspect or retain a
+historical day, export it to a separate
 date-specific `--output` path instead of the shared latest path. Review it before any explicit
 promotion. The guard preserves ordering by observation date; it does not prove source-data
 completeness or compare revisions within the same day. A small sibling `.lock` file is retained

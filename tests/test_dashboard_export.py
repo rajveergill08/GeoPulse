@@ -15,12 +15,15 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from geopulse.dashboard_export import (
+    H3_COLUMNS,
     HOURLY_COLUMNS,
     MART_COLUMNS,
+    MAX_H3_ROWS_PER_DAY,
     DashboardExportConfig,
     DashboardExportError,
     build_snapshot,
     fetch_aggregate_rows,
+    fetch_h3_rows,
     fetch_hourly_rows,
     main,
     publish_latest_snapshot,
@@ -71,6 +74,20 @@ def hourly_row(**changes: object) -> dict[str, object]:
     return row
 
 
+def h3_row(**changes: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "hex_id": "8861892e9bfffff",
+        "h3_resolution": Decimal("8"),
+        "traffic_date_local": date(2026, 9, 30),
+        "event_hour_local": 8,
+        "retail_timezone": "Asia/Kolkata",
+        "unique_visitors": Decimal("2"),
+        "ping_count": Decimal("3"),
+    }
+    row.update(changes)
+    return row
+
+
 class FakeCursor:
     def __init__(self, connection: FakeConnection) -> None:
         self.connection = connection
@@ -88,6 +105,9 @@ class FakeCursor:
         if "FCT_STORE_HOURLY_FOOTFALL" in sql:
             self.columns = HOURLY_COLUMNS
             self.description = [(name.upper(),) for name in HOURLY_COLUMNS]
+        elif "FCT_H3_HOURLY_FOOTFALL" in sql:
+            self.columns = H3_COLUMNS
+            self.description = [(name.upper(),) for name in H3_COLUMNS]
         if self.connection.fail_query:
             raise RuntimeError("secret-password: query failed")
         return self
@@ -95,6 +115,8 @@ class FakeCursor:
     def fetchall(self) -> list[tuple[object, ...]]:
         if self.columns == HOURLY_COLUMNS:
             rows = self.connection.hourly_rows
+        elif self.columns == H3_COLUMNS:
+            rows = self.connection.h3_rows
         else:
             rows = self.connection.rows
         return [tuple(row[name] for name in self.columns) for row in rows]
@@ -105,6 +127,7 @@ class FakeConnection:
         self,
         rows: list[dict[str, object]] | None = None,
         hourly_rows: list[dict[str, object]] | None = None,
+        h3_rows: list[dict[str, object]] | None = None,
     ) -> None:
         self.rows = rows if rows is not None else [mart_row()]
         self.hourly_rows = (
@@ -112,6 +135,7 @@ class FakeConnection:
             if hourly_rows is not None
             else [hourly_row(), hourly_row(store_id="store_b", unique_visitors=4, ping_count=5)]
         )
+        self.h3_rows = h3_rows if h3_rows is not None else [h3_row()]
         self.statements: list[tuple[str, object]] = []
         self.fail_query = False
         self.closed = False
@@ -178,6 +202,10 @@ class DashboardExportTests(unittest.TestCase):
             self.config.hourly_mart_table,
             "GEOPULSE.ANALYTICS_MARTS.FCT_STORE_HOURLY_FOOTFALL",
         )
+        self.assertEqual(
+            self.config.h3_mart_table,
+            "GEOPULSE.ANALYTICS_MARTS.FCT_H3_HOURLY_FOOTFALL",
+        )
         configured = DashboardExportConfig(
             date(2026, 9, 30),
             self.stores_path,
@@ -191,6 +219,10 @@ class DashboardExportTests(unittest.TestCase):
         self.assertEqual(
             configured.hourly_mart_table,
             "RETAIL_DB.ANALYTICS_DEV_MARTS.FCT_STORE_HOURLY_FOOTFALL",
+        )
+        self.assertEqual(
+            configured.h3_mart_table,
+            "RETAIL_DB.ANALYTICS_DEV_MARTS.FCT_H3_HOURLY_FOOTFALL",
         )
 
     def test_db_identifiers_and_output_collision_are_rejected(self) -> None:
@@ -246,6 +278,34 @@ class DashboardExportTests(unittest.TestCase):
         self.assertNotIn("DEVICE_ID", sql)
         self.assertNotIn("LATITUDE", sql)
         self.assertEqual(parameters, ("2026-09-30",))
+
+    def test_h3_query_is_aggregate_only_date_bound_and_bounded(self) -> None:
+        connection = FakeConnection()
+        self.assertEqual(fetch_h3_rows(connection, self.config), [h3_row()])
+        self.assertTrue(connection.cursor_closed)
+        sql, parameters = connection.statements[0]
+        self.assertTrue(sql.startswith("SELECT "))
+        self.assertIn(", ".join(H3_COLUMNS), sql)
+        self.assertIn(self.config.h3_mart_table, sql)
+        self.assertIn("TO_DATE(%s)", sql)
+        self.assertIn(f"LIMIT {MAX_H3_ROWS_PER_DAY + 1}", sql)
+        for sensitive in ("DEVICE_ID", "LATITUDE", "LONGITUDE", "LOCATION"):
+            self.assertNotIn(sensitive, sql.upper())
+        self.assertEqual(parameters, ("2026-09-30",))
+
+    def test_h3_query_rejects_column_mismatch_and_oversized_day(self) -> None:
+        connection = FakeConnection()
+        bad_cursor = connection.cursor()
+        bad_cursor.description = [("DEVICE_ID",)]
+        with (
+            patch.object(connection, "cursor", return_value=bad_cursor),
+            patch.object(bad_cursor, "execute", return_value=bad_cursor),
+            self.assertRaisesRegex(DashboardExportError, "unexpected aggregate columns"),
+        ):
+            fetch_h3_rows(connection, self.config)
+        connection.h3_rows = [h3_row()] * (MAX_H3_ROWS_PER_DAY + 1)
+        with self.assertRaisesRegex(DashboardExportError, "safe daily export row limit"):
+            fetch_h3_rows(connection, self.config)
 
     def test_mart_column_mismatch_is_rejected(self) -> None:
         connection = FakeConnection()
@@ -350,6 +410,77 @@ class DashboardExportTests(unittest.TestCase):
         )
         self.assertIn(self.config.hourly_mart_table, snapshot["metadata"]["source"])
         self.assertNotIn("device_id", json.dumps(snapshot).lower())
+
+    def test_h3_snapshot_is_sorted_and_contains_only_aggregate_cell_hours(self) -> None:
+        rows = [
+            h3_row(hex_id="8861892e9dfffff", event_hour_local=9, unique_visitors=1, ping_count=1),
+            h3_row(event_hour_local=23),
+            h3_row(),
+        ]
+        snapshot = build_snapshot(self.config, self.stores, [mart_row()], h3_rows=rows)
+        self.assertEqual(
+            snapshot["h3Footfall"],
+            [
+                {
+                    "hexId": "8861892e9bfffff",
+                    "h3Resolution": 8,
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 8,
+                    "uniqueVisitors": 2,
+                    "pingCount": 3,
+                },
+                {
+                    "hexId": "8861892e9bfffff",
+                    "h3Resolution": 8,
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 23,
+                    "uniqueVisitors": 2,
+                    "pingCount": 3,
+                },
+                {
+                    "hexId": "8861892e9dfffff",
+                    "h3Resolution": 8,
+                    "trafficDateLocal": "2026-09-30",
+                    "hourLocal": 9,
+                    "uniqueVisitors": 1,
+                    "pingCount": 1,
+                },
+            ],
+        )
+        self.assertIn(self.config.h3_mart_table, snapshot["metadata"]["source"])
+        for sensitive in ("device_id", "latitude", "longitude", "location"):
+            self.assertNotIn(sensitive, json.dumps(snapshot["h3Footfall"]).lower())
+
+    def test_h3_rows_are_strictly_validated(self) -> None:
+        for change in (
+            {"hex_id": "8861892E9BFFFFF"},
+            {"hex_id": "8861892e9bffff"},
+            {"hex_id": "8761892e9bfffff"},
+            {"hex_id": None},
+            {"h3_resolution": 7},
+            {"h3_resolution": True},
+            {"traffic_date_local": date(2026, 9, 29)},
+            {"traffic_date_local": datetime(2026, 9, 30, tzinfo=UTC)},
+            {"retail_timezone": "UTC"},
+            {"event_hour_local": -1},
+            {"event_hour_local": 24},
+            {"event_hour_local": "8"},
+            {"event_hour_local": True},
+            {"unique_visitors": 0},
+            {"unique_visitors": -1},
+            {"unique_visitors": Decimal("1.5")},
+            {"unique_visitors": Decimal("NaN")},
+            {"unique_visitors": Decimal("9007199254740992")},
+            {"ping_count": 0},
+            {"ping_count": Decimal("1.5")},
+            {"ping_count": Decimal("9007199254740992")},
+            {"unique_visitors": 4},
+        ):
+            with self.subTest(change=change), self.assertRaises(DashboardExportError):
+                build_snapshot(self.config, self.stores, [mart_row()], h3_rows=[h3_row(**change)])
+        for rows in ([], [h3_row(), h3_row()]):
+            with self.subTest(rows=rows), self.assertRaises(DashboardExportError):
+                build_snapshot(self.config, self.stores, [mart_row()], h3_rows=rows)
 
     def test_hourly_date_timezone_store_hour_and_counts_are_validated(self) -> None:
         for change in (
@@ -605,6 +736,10 @@ class DashboardExportTests(unittest.TestCase):
         mixed["flows"].append(other_flow)
         mixed_hourly = json.loads(json.dumps(existing))
         mixed_hourly["hourlyFootfall"][0]["trafficDateLocal"] = "2026-09-30"
+        mixed_h3 = json.loads(json.dumps(existing))
+        mixed_h3["h3Footfall"] = [
+            {"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}
+        ]
         incoming = self._snapshot_for_day(date(2026, 9, 30))
         self.output_path.parent.mkdir()
 
@@ -613,6 +748,7 @@ class DashboardExportTests(unittest.TestCase):
             json.dumps({"metadata": {}}),
             json.dumps(mixed),
             json.dumps(mixed_hourly),
+            json.dumps(mixed_h3),
         ):
             with self.subTest(content=content[:40]):
                 self.output_path.write_text(content, encoding="utf-8")
@@ -628,10 +764,14 @@ class DashboardExportTests(unittest.TestCase):
         self.output_path.write_text(json.dumps(existing), encoding="utf-8")
         original_bytes = self.output_path.read_bytes()
         incoming = self._snapshot_for_day(date(2026, 9, 30))
+        incoming["h3Footfall"] = [
+            {"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}
+        ]
 
         for section, field, value in (
             ("flows", "trafficDateLocal", "2026-09-29"),
             ("hourlyFootfall", "trafficDateLocal", "2026-09-29"),
+            ("h3Footfall", "trafficDateLocal", "2026-09-29"),
             ("metadata", "retailTimezone", "UTC"),
         ):
             with self.subTest(section=section):
@@ -735,8 +875,23 @@ class DashboardExportTests(unittest.TestCase):
         self.assertIs(snapshot["metadata"]["synthetic"], True)
         self.assertEqual(snapshot["flows"][0]["orderedCandidateToExistingVisitors"], 0)
         self.assertEqual(len(snapshot["hourlyFootfall"]), 2)
-        self.assertEqual(len(connection.statements), 2)
+        self.assertEqual(len(snapshot["h3Footfall"]), 1)
+        self.assertEqual(len(connection.statements), 3)
         self.assertEqual(json.loads(output.getvalue())["hourly_footfall_count"], 2)
+        self.assertEqual(json.loads(output.getvalue())["h3_footfall_count"], 1)
+
+    def test_cli_missing_h3_day_preserves_previous_snapshot(self) -> None:
+        self.output_path.parent.mkdir()
+        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        connection = FakeConnection(h3_rows=[])
+        with (
+            patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stderr(StringIO()),
+        ):
+            self.assertEqual(main(self._args()), 1)
+        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
+        self.assertTrue(connection.closed)
 
     def test_cli_historical_run_cannot_replace_newer_shared_snapshot(self) -> None:
         current = self._snapshot_for_day(date(2026, 10, 1))

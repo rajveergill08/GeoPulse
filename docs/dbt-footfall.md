@@ -52,18 +52,21 @@ store-hour counts, a missing H3-hour is unreported rather than an inferred zero,
 hourly unique visitors would double-count returning devices.
 
 The DuckDB CI seed contains real resolution-8 H3 indexes precomputed from synthetic Bengaluru
-coordinates. It tests repeated-device counting, separate cells, and the UTC-to-Kolkata date
-boundary. It does **not** exercise Snowflake's geography-to-H3 function; Snowflake parsing only
+coordinates. Its matched pings represent the same synthetic observations as the store-catchment
+seed, while two additional citywide pings fall outside those catchments. It tests
+repeated-device counting, separate cells, and the UTC-to-Kolkata date boundary. It does **not**
+exercise Snowflake's geography-to-H3 function; Snowflake parsing only
 checks the project manifest, not the execution of the SQL. A live development-account build
 and cell-level spot check are still needed. The dbt transformer role additionally requires
 `USAGE` on the raw schema and `SELECT` on `RAW.MOBILE_PINGS`. If the raw schema is not `RAW`, set
 `DBT_SNOWFLAKE_RAW_SCHEMA`.
 
-This mart is internal groundwork for a future 3D Kepler H3 layer; it is **not** part of the
-current dashboard JSON export. The existing browser map still displays store-level aggregate
-markers, not actual street-level footfall hexagons. Real-mobility H3 publication remains blocked
-until a reviewed small-cell suppression, retention, and access policy is in place. The H3
-fixture is synthetic and must not be loaded into a production schema.
+The synthetic-only dashboard exporter selects this aggregate mart for one retail-local date,
+and the Kepler map renders the resulting cells as observed hourly footfall. The hexagons are
+citywide observations, not store-attributed visits or device routes; the store markers and
+store-pair metrics remain separate measures. Real-mobility H3 publication remains blocked until
+a reviewed small-cell suppression, retention, and access policy is in place. The H3 fixture is
+synthetic and must not be loaded into a production schema.
 
 The native function and expected string format follow [Snowflake's H3 point-to-cell
 reference](https://docs.snowflake.com/en/sql-reference/functions/h3_point_to_cell_string).

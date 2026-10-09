@@ -30,6 +30,7 @@ from geopulse.warehouse import (
 IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*\Z")
 STORE_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+\Z")
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+H3_RESOLUTION_8_PATTERN = re.compile(r"88[0-9a-f]{13}\Z")
 STORE_COLUMNS = (
     "store_id",
     "store_name",
@@ -62,10 +63,21 @@ HOURLY_COLUMNS = (
     "unique_visitors",
     "ping_count",
 )
+H3_COLUMNS = (
+    "hex_id",
+    "h3_resolution",
+    "traffic_date_local",
+    "event_hour_local",
+    "retail_timezone",
+    "unique_visitors",
+    "ping_count",
+)
 DAYPARTS = frozenset({"morning_commute", "midday", "evening_commute", "off_peak"})
 RATE_TOLERANCE = Decimal("0.000001")  # dbt rounds rates to six decimal places.
 MAX_SAFE_JS_INTEGER = 2**53 - 1
 PUBLICATION_LOCK_TIMEOUT_SECONDS = 30
+# One extra row lets the exporter reject an oversized day rather than silently truncating it.
+MAX_H3_ROWS_PER_DAY = 50_000
 
 
 class DashboardExportError(ValueError):
@@ -128,6 +140,10 @@ class DashboardExportConfig:
     @property
     def hourly_mart_table(self) -> str:
         return f"{self.database}.{self.mart_schema}.FCT_STORE_HOURLY_FOOTFALL"
+
+    @property
+    def h3_mart_table(self) -> str:
+        return f"{self.database}.{self.mart_schema}.FCT_H3_HOURLY_FOOTFALL"
 
 
 def _decimal(value: object, field: str) -> Decimal:
@@ -255,6 +271,26 @@ def fetch_hourly_rows(connection: Any, config: DashboardExportConfig) -> list[di
         return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
 
 
+def fetch_h3_rows(connection: Any, config: DashboardExportConfig) -> list[dict[str, Any]]:
+    """Select a bounded, aggregate-only H3 feed for one retail-local day."""
+
+    sql = (
+        f"SELECT {', '.join(H3_COLUMNS)} FROM {config.h3_mart_table} "
+        "WHERE TRAFFIC_DATE_LOCAL = TO_DATE(%s) "
+        "ORDER BY HEX_ID, EVENT_HOUR_LOCAL "
+        f"LIMIT {MAX_H3_ROWS_PER_DAY + 1}"
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(sql, (config.run_date.isoformat(),))
+        names = tuple(column[0].lower() for column in cursor.description)
+        if names != H3_COLUMNS:
+            raise DashboardExportError("Snowflake H3 mart returned unexpected aggregate columns")
+        rows = cursor.fetchall()
+        if len(rows) > MAX_H3_ROWS_PER_DAY:
+            raise DashboardExportError("H3 feed exceeds the safe daily export row limit")
+        return [dict(zip(names, row, strict=True)) for row in rows]
+
+
 def _count(value: object, field: str, *, positive: bool = False) -> int:
     number = _decimal(value, field)
     if (
@@ -338,12 +374,57 @@ def _build_hourly_footfall(
     )
 
 
+def _build_h3_footfall(
+    config: DashboardExportConfig, rows: Sequence[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    if not rows:
+        raise DashboardExportError("No H3 footfall exists for the requested retail day")
+    h3_footfall: list[dict[str, Any]] = []
+    grains: set[tuple[str, int]] = set()
+    for row in rows:
+        hex_id = row["hex_id"]
+        if not isinstance(hex_id, str) or not H3_RESOLUTION_8_PATTERN.fullmatch(hex_id):
+            raise DashboardExportError("The H3 mart returned a noncanonical resolution-8 cell ID")
+        if _count(row["h3_resolution"], "H3 resolution") != 8:
+            raise DashboardExportError("The H3 mart returned an unexpected resolution")
+        traffic_date = _as_date(row["traffic_date_local"])
+        if traffic_date != config.run_date:
+            raise DashboardExportError("The H3 mart returned a different retail date")
+        if row["retail_timezone"] != config.retail_timezone:
+            raise DashboardExportError(
+                "The H3 mart retail timezone differs from the configured one"
+            )
+        hour = row["event_hour_local"]
+        if isinstance(hour, bool) or not isinstance(hour, int) or not 0 <= hour <= 23:
+            raise DashboardExportError("The H3 mart returned an invalid local hour")
+        grain = (hex_id, hour)
+        if grain in grains:
+            raise DashboardExportError("The H3 mart contains duplicate cell/hour rows")
+        grains.add(grain)
+        unique_visitors = _count(row["unique_visitors"], "H3 unique visitors", positive=True)
+        ping_count = _count(row["ping_count"], "H3 ping count", positive=True)
+        if unique_visitors > ping_count:
+            raise DashboardExportError("The H3 mart visitor count exceeds the ping count")
+        h3_footfall.append(
+            {
+                "hexId": hex_id,
+                "h3Resolution": 8,
+                "trafficDateLocal": traffic_date.isoformat(),
+                "hourLocal": hour,
+                "uniqueVisitors": unique_visitors,
+                "pingCount": ping_count,
+            }
+        )
+    return sorted(h3_footfall, key=lambda row: (row["hexId"], row["hourLocal"]))
+
+
 def build_snapshot(
     config: DashboardExportConfig,
     stores: Sequence[dict[str, Any]],
     rows: Sequence[dict[str, Any]],
     *,
     hourly_rows: Sequence[dict[str, Any]] | None = None,
+    h3_rows: Sequence[dict[str, Any]] | None = None,
     exported_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Map Snowflake decimals/dates to the exact React JSON contract."""
@@ -439,18 +520,19 @@ def build_snapshot(
         if hourly_rows is None
         else _build_hourly_footfall(config, store_index, hourly_rows, flow_store_ids)
     )
+    h3_footfall = None if h3_rows is None else _build_h3_footfall(config, h3_rows)
     moment = exported_at or datetime.now(UTC)
     if moment.tzinfo is None:
         raise DashboardExportError("Snapshot generation time must include a timezone")
     refreshed_at = moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-    return {
+    sources = [config.mart_table]
+    if hourly_rows is not None:
+        sources.append(config.hourly_mart_table)
+    if h3_rows is not None:
+        sources.append(config.h3_mart_table)
+    snapshot = {
         "metadata": {
-            "source": (
-                f"Snowflake {config.mart_table} + store reference CSV"
-                if hourly_rows is None
-                else f"Snowflake {config.mart_table} + {config.hourly_mart_table}"
-                " + store reference CSV"
-            ),
+            "source": f"Snowflake {' + '.join(sources)} + store reference CSV",
             "refreshedAt": refreshed_at,
             "timezone": "UTC",
             "retailTimezone": config.retail_timezone,
@@ -468,6 +550,9 @@ def build_snapshot(
         ),
         "hourlyFootfall": hourly_footfall,
     }
+    if h3_footfall is not None:
+        snapshot["h3Footfall"] = h3_footfall
+    return snapshot
 
 
 def write_snapshot_atomically(output_path: Path, snapshot: Mapping[str, Any]) -> None:
@@ -504,17 +589,19 @@ def _snapshot_retail_date(snapshot: object, retail_timezone: str) -> date:
     metadata = snapshot.get("metadata")
     flows = snapshot.get("flows")
     hourly = snapshot.get("hourlyFootfall")
+    h3 = snapshot.get("h3Footfall", [])
     if (
         not isinstance(metadata, Mapping)
         or metadata.get("retailTimezone") != retail_timezone
         or not isinstance(flows, list)
         or not flows
         or not isinstance(hourly, list)
+        or not isinstance(h3, list)
     ):
         raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
 
     traffic_dates: set[date] = set()
-    for row in chain(flows, hourly):
+    for row in chain(flows, hourly, h3):
         if not isinstance(row, Mapping):
             raise DashboardExportError("Dashboard snapshot has no unambiguous retail date")
         value = row.get("trafficDateLocal")
@@ -639,7 +726,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         connection = connect_snowflake(settings)
         rows = fetch_aggregate_rows(connection, config)
         hourly_rows = fetch_hourly_rows(connection, config)
-        snapshot = build_snapshot(config, stores, rows, hourly_rows=hourly_rows)
+        h3_rows = fetch_h3_rows(connection, config)
+        snapshot = build_snapshot(
+            config, stores, rows, hourly_rows=hourly_rows, h3_rows=h3_rows
+        )
         publish_latest_snapshot(config, snapshot)
         print(
             json.dumps(
@@ -649,6 +739,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     "target": str(config.output_path),
                     "flow_count": len(snapshot["flows"]),
                     "hourly_footfall_count": len(snapshot["hourlyFootfall"]),
+                    "h3_footfall_count": len(snapshot["h3Footfall"]),
                     "synthetic": config.synthetic,
                 },
                 sort_keys=True,

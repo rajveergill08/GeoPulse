@@ -43,9 +43,20 @@ export interface HourlyFootfall {
   pingCount: number;
 }
 
+export interface H3Footfall {
+  hexId: string;
+  h3Resolution: 8;
+  trafficDateLocal: string;
+  hourLocal: number;
+  uniqueVisitors: number;
+  pingCount: number;
+}
+
 export interface DashboardSnapshot {
   metadata: DashboardMetadata;
   stores: StoreMetric[];
   flows: CannibalizationFlow[];
   hourlyFootfall: HourlyFootfall[];
+  /** Optional for snapshots published before the H3 mart was introduced. */
+  h3Footfall?: H3Footfall[];
 }

@@ -93,5 +93,55 @@
       "uniqueVisitors": 3,
       "pingCount": 3
     }
+  ],
+  "h3Footfall": [
+    {
+      "hexId": "88618925a7fffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 8,
+      "pingCount": 8
+    },
+    {
+      "hexId": "88618925a7fffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 18,
+      "uniqueVisitors": 1,
+      "pingCount": 1
+    },
+    {
+      "hexId": "8861892e9bfffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 3,
+      "pingCount": 4
+    },
+    {
+      "hexId": "8861892e9bfffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 18,
+      "uniqueVisitors": 2,
+      "pingCount": 2
+    },
+    {
+      "hexId": "8861892e9dfffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 23,
+      "uniqueVisitors": 1,
+      "pingCount": 1
+    },
+    {
+      "hexId": "8861892ec3fffff",
+      "h3Resolution": 8,
+      "trafficDateLocal": "2026-09-22",
+      "hourLocal": 8,
+      "uniqueVisitors": 4,
+      "pingCount": 4
+    }
   ]
 }

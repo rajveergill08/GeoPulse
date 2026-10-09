@@ -1,7 +1,8 @@
-import type {CannibalizationFlow, DashboardSnapshot, HourlyFootfall, StoreMetric} from './types';
+import type {CannibalizationFlow, DashboardSnapshot, H3Footfall, HourlyFootfall, StoreMetric} from './types';
 
 const DEFAULT_DATA_URL = '/data/geopulse-dashboard.json';
 const snapshotRequests = new Map<string, Promise<DashboardSnapshot>>();
+const RESOLUTION_8_H3_ID = /^88[0-9a-f]{13}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -49,6 +50,28 @@ function isHourlyFootfall(value: unknown): value is HourlyFootfall {
     value.hourLocal >= 0 &&
     value.hourLocal <= 23 &&
     isVisitorCount(value.uniqueVisitors) &&
+    isVisitorCount(value.pingCount) &&
+    value.uniqueVisitors <= value.pingCount
+  );
+}
+
+function isH3Footfall(value: unknown): value is H3Footfall {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Object.keys(value).length === 6 &&
+    typeof value.hexId === 'string' &&
+    RESOLUTION_8_H3_ID.test(value.hexId) &&
+    value.h3Resolution === 8 &&
+    isIsoLocalDate(value.trafficDateLocal) &&
+    typeof value.hourLocal === 'number' &&
+    Number.isInteger(value.hourLocal) &&
+    value.hourLocal >= 0 &&
+    value.hourLocal <= 23 &&
+    isVisitorCount(value.uniqueVisitors) &&
+    value.uniqueVisitors > 0 &&
     isVisitorCount(value.pingCount) &&
     value.uniqueVisitors <= value.pingCount
   );
@@ -169,6 +192,27 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
       throw new Error('Dashboard hourly footfall contains duplicate store-hour metrics.');
     }
     hourlyKeys.add(key);
+  }
+
+  // Older published snapshots legitimately have no H3 mart. If the field is
+  // present, reject partial or device-level data rather than hiding it.
+  if (value.h3Footfall !== undefined) {
+    if (!Array.isArray(value.h3Footfall) || !value.h3Footfall.every(isH3Footfall)) {
+      throw new Error('Dashboard response contains invalid H3 footfall metrics.');
+    }
+
+    const h3Keys = new Set<string>();
+    for (const row of value.h3Footfall) {
+      if (!flowDates.has(row.trafficDateLocal)) {
+        throw new Error('Dashboard H3 footfall references an unknown flow date.');
+      }
+
+      const key = `${row.hexId}\u0000${row.trafficDateLocal}\u0000${row.hourLocal}`;
+      if (h3Keys.has(key)) {
+        throw new Error('Dashboard H3 footfall contains duplicate hex-hour metrics.');
+      }
+      h3Keys.add(key);
+    }
   }
 
   return value as unknown as DashboardSnapshot;

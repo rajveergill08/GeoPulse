@@ -99,6 +99,15 @@ describe('parseDashboardSnapshot', () => {
       uniqueVisitors: 4,
       pingCount: 4
     });
+    expect(fixture.h3Footfall).toHaveLength(6);
+    expect(fixture.h3Footfall).toContainEqual({
+      hexId: '8861892e9bfffff',
+      h3Resolution: 8,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 3,
+      pingCount: 4
+    });
   });
 
   it('accepts a consistent aggregated mobility snapshot', () => {
@@ -272,6 +281,77 @@ describe('parseDashboardSnapshot', () => {
     hourlyRow.deviceId = 'private-device';
     expect(() => parseDashboardSnapshot(snapshot)).toThrow(
       'Dashboard response contains invalid hourly footfall metrics.'
+    );
+  });
+
+  it('accepts optional, empty, and valid citywide H3 aggregates', () => {
+    const legacy = validSnapshot();
+    expect(parseDashboardSnapshot(legacy)).toEqual(legacy);
+
+    const snapshot = validSnapshot();
+    snapshot.h3Footfall = [];
+    expect(parseDashboardSnapshot(snapshot)).toEqual(snapshot);
+
+    snapshot.h3Footfall.push({
+      hexId: '8861892e9bfffff',
+      h3Resolution: 8,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 2,
+      pingCount: 3
+    });
+    expect(parseDashboardSnapshot(snapshot)).toEqual(snapshot);
+  });
+
+  it('rejects invalid H3 identifiers, resolution, dates, hours, and counts', () => {
+    const validRow = {
+      hexId: '8861892e9bfffff',
+      h3Resolution: 8 as const,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 2,
+      pingCount: 3
+    };
+    const invalidRows: unknown[] = [
+      {...validRow, hexId: '8861892E9BFFFFF'},
+      {...validRow, hexId: '8861892e9bffff'},
+      {...validRow, h3Resolution: 7},
+      {...validRow, trafficDateLocal: '2026-02-30'},
+      {...validRow, hourLocal: 24},
+      {...validRow, hourLocal: 8.5},
+      {...validRow, uniqueVisitors: 0},
+      {...validRow, uniqueVisitors: 4},
+      {...validRow, pingCount: Number.MAX_SAFE_INTEGER + 1},
+      {...validRow, deviceId: 'private-device'}
+    ];
+
+    for (const row of invalidRows) {
+      const snapshot = {...validSnapshot(), h3Footfall: [row]};
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid H3 footfall metrics.'
+      );
+    }
+  });
+
+  it('rejects duplicate H3 cell-hours and unrelated dates', () => {
+    const snapshot = validSnapshot();
+    snapshot.h3Footfall = [{
+      hexId: '8861892e9bfffff',
+      h3Resolution: 8,
+      trafficDateLocal: '2026-09-22',
+      hourLocal: 8,
+      uniqueVisitors: 2,
+      pingCount: 3
+    }];
+    snapshot.h3Footfall.push({...snapshot.h3Footfall[0]});
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard H3 footfall contains duplicate hex-hour metrics.'
+    );
+
+    snapshot.h3Footfall.pop();
+    snapshot.h3Footfall[0].trafficDateLocal = '2026-09-23';
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard H3 footfall references an unknown flow date.'
     );
   });
 });

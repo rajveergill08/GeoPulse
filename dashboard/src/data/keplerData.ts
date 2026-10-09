@@ -4,10 +4,11 @@ import type {CannibalizationFlow, DashboardSnapshot} from './types';
 export const STORES_DATASET_ID = 'geopulse_stores';
 export const FLOWS_DATASET_ID = 'geopulse_flows';
 export const HOURLY_FOOTFALL_DATASET_ID = 'geopulse_hourly_footfall';
+export const H3_FOOTFALL_DATASET_ID = 'geopulse_h3_footfall';
 
 interface KeplerField {
   name: string;
-  type: 'string' | 'real' | 'integer';
+  type: 'string' | 'real' | 'integer' | 'h3';
   format: string;
 }
 
@@ -34,6 +35,11 @@ export function buildKeplerDatasets(
     (row) =>
       storesById.has(row.storeId) &&
       row.trafficDateLocal === flow.trafficDateLocal
+  );
+  // The H3 mart covers all pings in the city, not only matches to these stores.
+  // Keep it independent of the selected pair while following its local date.
+  const h3Rows = (snapshot.h3Footfall ?? []).filter(
+    (row) => row.trafficDateLocal === flow.trafficDateLocal
   );
 
   return [
@@ -128,6 +134,30 @@ export function buildKeplerDatasets(
             row.pingCount
           ];
         })
+      }
+    },
+    {
+      info: {
+        id: H3_FOOTFALL_DATASET_ID,
+        label: 'Citywide H3 hourly visitors (not store visits)'
+      },
+      data: {
+        fields: [
+          {name: 'hex_id', type: 'h3', format: ''},
+          {name: 'h3_resolution', type: 'integer', format: ''},
+          {name: 'traffic_date_local', type: 'string', format: ''},
+          {name: 'hour_local', type: 'integer', format: ''},
+          {name: 'unique_visitors', type: 'integer', format: ''},
+          {name: 'ping_count', type: 'integer', format: ''}
+        ],
+        rows: h3Rows.map((row) => [
+          row.hexId,
+          row.h3Resolution,
+          row.trafficDateLocal,
+          row.hourLocal,
+          row.uniqueVisitors,
+          row.pingCount
+        ])
       }
     }
   ];
