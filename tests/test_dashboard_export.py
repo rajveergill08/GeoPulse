@@ -737,9 +737,7 @@ class DashboardExportTests(unittest.TestCase):
         mixed_hourly = json.loads(json.dumps(existing))
         mixed_hourly["hourlyFootfall"][0]["trafficDateLocal"] = "2026-09-30"
         mixed_h3 = json.loads(json.dumps(existing))
-        mixed_h3["h3Footfall"] = [
-            {"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}
-        ]
+        mixed_h3["h3Footfall"] = [{"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}]
         incoming = self._snapshot_for_day(date(2026, 9, 30))
         self.output_path.parent.mkdir()
 
@@ -764,9 +762,7 @@ class DashboardExportTests(unittest.TestCase):
         self.output_path.write_text(json.dumps(existing), encoding="utf-8")
         original_bytes = self.output_path.read_bytes()
         incoming = self._snapshot_for_day(date(2026, 9, 30))
-        incoming["h3Footfall"] = [
-            {"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}
-        ]
+        incoming["h3Footfall"] = [{"hexId": "8861892e9bfffff", "trafficDateLocal": "2026-09-30"}]
 
         for section, field, value in (
             ("flows", "trafficDateLocal", "2026-09-29"),

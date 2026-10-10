@@ -27,6 +27,9 @@ analytics = [
 warehouse = [
   "snowflake-connector-python==4.7.4",
 ]
+quality = [
+  "ruff==0.17.0",
+]
 orchestration = [
   "apache-airflow==3.3.2",
   "apache-airflow-providers-standard==1.19.0",
@@ -46,6 +49,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["target", "logs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

@@ -727,9 +727,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         rows = fetch_aggregate_rows(connection, config)
         hourly_rows = fetch_hourly_rows(connection, config)
         h3_rows = fetch_h3_rows(connection, config)
-        snapshot = build_snapshot(
-            config, stores, rows, hourly_rows=hourly_rows, h3_rows=h3_rows
-        )
+        snapshot = build_snapshot(config, stores, rows, hourly_rows=hourly_rows, h3_rows=h3_rows)
         publish_latest_snapshot(config, snapshot)
         print(
             json.dumps(

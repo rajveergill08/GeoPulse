@@ -53,8 +53,12 @@ class H3FixtureTests(unittest.TestCase):
             self.assertEqual(
                 set(row),
                 {
-                    "hexId", "h3Resolution", "trafficDateLocal", "hourLocal",
-                    "uniqueVisitors", "pingCount",
+                    "hexId",
+                    "h3Resolution",
+                    "trafficDateLocal",
+                    "hourLocal",
+                    "uniqueVisitors",
+                    "pingCount",
                 },
             )
             self.assertEqual(row["h3Resolution"], 8)

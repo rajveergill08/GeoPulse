@@ -175,3 +175,16 @@ the file before publishing. The publisher converts validated longitude/latitude 
 All generated records are synthetic. They contain no real mobile identifiers or human movement.
 See `docs/data-contract.md` for the schema, generation guarantees, and production privacy
 boundary.
+
+## Python quality checks
+
+Install the pinned quality tool and run the same source, test, and DAG checks enforced by CI:
+
+```bash
+python -m pip install --editable ".[quality]"
+ruff check src tests dags
+ruff format --check src tests dags
+```
+
+The formatting check is read-only. Run `ruff format` deliberately when formatting changes are
+needed, then rerun the complete unit and integration tests before committing.

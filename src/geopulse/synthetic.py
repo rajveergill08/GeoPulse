@@ -13,10 +13,11 @@ import hashlib
 import json
 import math
 import random
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from pathlib import Path
-from typing import Iterable, Iterator, TextIO
+from typing import TextIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -143,12 +144,12 @@ def _timezone_for(name: str) -> tzinfo:
 
 
 def _derive_seed(seed: int, device_index: int) -> int:
-    digest = hashlib.sha256(f"{seed}:{device_index}".encode("utf-8")).digest()
+    digest = hashlib.sha256(f"{seed}:{device_index}".encode()).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 
 def _anonymous_device_id(salt: str, device_index: int) -> str:
-    digest = hashlib.sha256(f"{salt}:{device_index}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{salt}:{device_index}".encode()).hexdigest()
     return f"dev_{digest[:20]}"
 
 
@@ -178,7 +179,9 @@ def _sample_near(
     )
 
 
-def _build_profile(config: GeneratorConfig, device_index: int) -> tuple[DeviceProfile, random.Random]:
+def _build_profile(
+    config: GeneratorConfig, device_index: int
+) -> tuple[DeviceProfile, random.Random]:
     rng = random.Random(_derive_seed(config.seed, device_index))
     home = _sample_uniform_point(rng, config.city)
     work = _sample_near(rng, config.city.centre, radius_km=8.0, city=config.city)
@@ -224,17 +227,23 @@ def _weekday_position(profile: DeviceProfile, minute: int) -> tuple[GeoPoint, st
         return profile.home, "home"
     if minute < work_arrival:
         progress = (minute - profile.morning_departure) / profile.morning_commute_minutes
-        return _interpolate(profile.home, profile.work, progress, profile.route_curve), "morning_commute"
+        return _interpolate(
+            profile.home, profile.work, progress, profile.route_curve
+        ), "morning_commute"
     if minute < profile.evening_departure:
         return profile.work, "work"
     if minute < retail_arrival:
         progress = (minute - profile.evening_departure) / 45
-        return _interpolate(profile.work, profile.retail, progress, -profile.route_curve), "evening_commute"
+        return _interpolate(
+            profile.work, profile.retail, progress, -profile.route_curve
+        ), "evening_commute"
     if minute < retail_departure:
         return profile.retail, "retail"
     if minute < home_arrival:
         progress = (minute - retail_departure) / 60
-        return _interpolate(profile.retail, profile.home, progress, profile.route_curve), "return_home"
+        return _interpolate(
+            profile.retail, profile.home, progress, profile.route_curve
+        ), "return_home"
     return profile.home, "home"
 
 
@@ -248,12 +257,16 @@ def _weekend_position(profile: DeviceProfile, minute: int) -> tuple[GeoPoint, st
         return profile.home, "home"
     if minute < retail_arrival:
         progress = (minute - retail_departure) / (retail_arrival - retail_departure)
-        return _interpolate(profile.home, profile.retail, progress, profile.route_curve), "leisure_trip"
+        return _interpolate(
+            profile.home, profile.retail, progress, profile.route_curve
+        ), "leisure_trip"
     if minute < return_departure:
         return profile.retail, "retail"
     if minute < home_arrival:
         progress = (minute - return_departure) / (home_arrival - return_departure)
-        return _interpolate(profile.retail, profile.home, progress, -profile.route_curve), "return_home"
+        return _interpolate(
+            profile.retail, profile.home, progress, -profile.route_curve
+        ), "return_home"
     return profile.home, "home"
 
 

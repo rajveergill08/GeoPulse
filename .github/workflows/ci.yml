@@ -23,8 +23,14 @@ jobs:
       - name: Compile source and DAGs
         run: python -m compileall -q src dags
 
-      - name: Install Snowflake publishers
-        run: python -m pip install --editable ".[warehouse]"
+      - name: Install Snowflake publishers and quality checks
+        run: python -m pip install --editable ".[warehouse,quality]"
+
+      - name: Lint Python source and tests
+        run: ruff check src tests dags
+
+      - name: Check Python formatting
+        run: ruff format --check src tests dags
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
