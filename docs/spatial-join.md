@@ -57,6 +57,11 @@ compatible Sedona and GeoTools JARs, override `--maven-packages`.
 
 - The join broadcasts only the store table, not the ping data. This is appropriate for thousands
   of catchments and millions of pings.
+- Match output is range-repartitioned by UTC date, hour, and device ID using the configured
+  shuffle partition count. The device key lets several writers handle a busy hour instead of
+  collapsing a daily batch into one or two date-only tasks; the Parquet directory layout still
+  uses date and hour only. Range boundaries are sampled, so task sizes are approximate rather
+  than guaranteed equal.
 - Only validated pings, stores, and match results are cached; raw and rejected inputs are not kept
   as extra in-memory copies.
 - Adaptive query execution is enabled and shuffle partitions are configurable per environment.

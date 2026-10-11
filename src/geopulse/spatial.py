@@ -308,6 +308,14 @@ def _child_path(base_path: str, child: str) -> str:
     return f"{normalized}/{child}"
 
 
+def _partition_matches_for_write(matches: Any, shuffle_partitions: int) -> Any:
+    """Spread a busy UTC hour across writers before date/hour directory partitioning."""
+
+    return matches.repartitionByRange(
+        shuffle_partitions, "event_date", "event_hour_utc", "device_id"
+    )
+
+
 def _write_outputs(
     spark: Any,
     config: SpatialJoinConfig,
@@ -317,7 +325,7 @@ def _write_outputs(
     functions, _ = _require_spatial_dependencies()
     mode = config.write_mode.lower()
     (
-        frames.matches.repartition("event_date")
+        _partition_matches_for_write(frames.matches, config.shuffle_partitions)
         .write.mode(mode)
         .partitionBy("event_date", "event_hour_utc")
         .parquet(_child_path(config.output_path, "matches"))

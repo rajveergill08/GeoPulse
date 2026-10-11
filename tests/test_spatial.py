@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -13,6 +16,7 @@ from geopulse.spatial import (
     SEDONA_VERSION,
     SPARK_VERSION,
     SpatialJoinConfig,
+    _partition_matches_for_write,
     build_spark_session,
     build_spatial_frames,
 )
@@ -35,6 +39,16 @@ class SpatialJoinConfigTests(unittest.TestCase):
             SpatialJoinConfig("pings.csv", "stores.csv", "output", shuffle_partitions=0)
         with self.assertRaisesRegex(ValueError, "write_mode"):
             SpatialJoinConfig("pings.csv", "stores.csv", "output", write_mode="replace")
+
+    def test_match_write_uses_hour_and_device_to_avoid_single_date_partition(self) -> None:
+        matches = Mock()
+
+        result = _partition_matches_for_write(matches, 16)
+
+        self.assertIs(result, matches.repartitionByRange.return_value)
+        matches.repartitionByRange.assert_called_once_with(
+            16, "event_date", "event_hour_utc", "device_id"
+        )
 
 
 @unittest.skipUnless(
@@ -92,6 +106,24 @@ class SedonaSpatialIntegrationTests(unittest.TestCase):
         self.assertTrue(catchments[0].catchment_wkt.startswith("POLYGON"))
         self.assertEqual(rejected_pings[0].rejection_reason, "invalid_event_timestamp")
         self.assertEqual(rejected_stores[0].rejection_reason, "invalid_latitude")
+
+    def test_match_write_distributes_one_hour_without_changing_parquet_layout(self) -> None:
+        from pyspark.sql import functions
+
+        matches = self.spark.createDataFrame(
+            [(f"device_{index:03d}", date(2026, 9, 20), 8) for index in range(96)],
+            "device_id string, event_date date, event_hour_utc int",
+        )
+        distributed = _partition_matches_for_write(matches, 4)
+        occupied_partitions = distributed.select(functions.spark_partition_id()).distinct().count()
+        self.assertGreater(occupied_partitions, 1)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "matches"
+            distributed.write.partitionBy("event_date", "event_hour_utc").parquet(str(output))
+            hour_directory = output / "event_date=2026-09-20" / "event_hour_utc=8"
+            self.assertGreater(len(list(hour_directory.glob("*.parquet"))), 1)
+            self.assertEqual(self.spark.read.parquet(str(output)).count(), 96)
 
 
 if __name__ == "__main__":
