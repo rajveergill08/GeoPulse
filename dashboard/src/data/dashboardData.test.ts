@@ -196,6 +196,82 @@ describe('parseDashboardSnapshot', () => {
     );
   });
 
+  it('requires valid flow identity, distinct stores, and a real local date', () => {
+    for (const localDate of ['2026-02-30', '2026-9-22', '2026-09-22T00:00:00Z']) {
+      const snapshot = validSnapshot();
+      snapshot.flows[0].trafficDateLocal = localDate;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid cannibalization metrics.'
+      );
+    }
+
+    const emptyId = validSnapshot();
+    emptyId.flows[0].scenarioId = '  ';
+    expect(() => parseDashboardSnapshot(emptyId)).toThrow(
+      'Dashboard response contains invalid cannibalization metrics.'
+    );
+
+    const sameStore = validSnapshot();
+    sameStore.flows[0].candidateStoreId = 'store_a';
+    expect(() => parseDashboardSnapshot(sameStore)).toThrow(
+      'Dashboard response contains invalid cannibalization metrics.'
+    );
+  });
+
+  it('rejects duplicate or unexpected store metadata', () => {
+    const duplicate = validSnapshot();
+    duplicate.stores.push({...duplicate.stores[0]});
+    expect(() => parseDashboardSnapshot(duplicate)).toThrow(
+      'Dashboard response contains duplicate store IDs.'
+    );
+
+    const unexpected = validSnapshot();
+    const store = unexpected.stores[0] as typeof unexpected.stores[number] & {
+      deviceId?: string;
+    };
+    store.deviceId = 'private-device';
+    expect(() => parseDashboardSnapshot(unexpected)).toThrow(
+      'Dashboard response contains invalid store metadata.'
+    );
+  });
+
+  it('requires the referenced stores to have the correct comparison roles', () => {
+    const wrongExisting = validSnapshot();
+    wrongExisting.stores[0].status = 'proposed';
+    expect(() => parseDashboardSnapshot(wrongExisting)).toThrow(
+      'Dashboard flow store roles do not match existing/candidate statuses.'
+    );
+
+    const wrongCandidate = validSnapshot();
+    wrongCandidate.stores[1].status = 'existing';
+    expect(() => parseDashboardSnapshot(wrongCandidate)).toThrow(
+      'Dashboard flow store roles do not match existing/candidate statuses.'
+    );
+  });
+
+  it('rejects duplicate scenario IDs and store-pair/daypart flow grains', () => {
+    const duplicateId = validSnapshot();
+    duplicateId.flows.push({...duplicateId.flows[0], daypart: 'midday'});
+    expect(() => parseDashboardSnapshot(duplicateId)).toThrow(
+      'Dashboard response contains duplicate scenario IDs.'
+    );
+
+    const duplicateGrain = validSnapshot();
+    duplicateGrain.flows.push({...duplicateGrain.flows[0], scenarioId: 'another-scenario'});
+    expect(() => parseDashboardSnapshot(duplicateGrain)).toThrow(
+      'Dashboard response contains duplicate store/daypart flows.'
+    );
+  });
+
+  it('rejects unexpected fields in a flow aggregate', () => {
+    const snapshot = validSnapshot();
+    const flow = snapshot.flows[0] as typeof snapshot.flows[number] & {deviceId?: string};
+    flow.deviceId = 'private-device';
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard response contains invalid cannibalization metrics.'
+    );
+  });
+
   it('requires the retail timezone used by local dates and dayparts', () => {
     const snapshot = validSnapshot();
     snapshot.metadata.retailTimezone = '';

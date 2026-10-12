@@ -49,8 +49,11 @@ The endpoint returns one snapshot with:
   with `hexId`, `h3Resolution`, `trafficDateLocal`, `hourLocal`, `uniqueVisitors`, and
   `pingCount`. These are derived from GPS pings, not assigned to stores or observed paths.
 
-Every flow must reference stores in the same response. Visitor counts must be non-negative,
-JavaScript-safe integers; shared visitors cannot exceed either store's visitors, and incremental
+Store IDs and scenario IDs must be unique. Each flow must have a valid retail-local date,
+reference a distinct existing store and proposed/candidate store in the same response, and be
+unique by store pair, date, and daypart. Store and flow objects reject unexpected fields, such
+as device identifiers. Visitor counts must be non-negative, JavaScript-safe integers; shared
+visitors cannot exceed either store's visitors, and incremental
 visitors must equal candidate visitors minus shared visitors. Ordered visitors must be between
 zero and shared visitors. Each rate must agree with its visitor counts to the dbt mart's
 six-decimal precision, and candidate overlap plus incremental

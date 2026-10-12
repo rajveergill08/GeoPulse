@@ -88,8 +88,11 @@ function isStore(value: unknown): value is StoreMetric {
   }
 
   return (
+    Object.keys(value).length === 6 &&
     typeof value.storeId === 'string' &&
+    value.storeId.trim().length > 0 &&
     typeof value.storeName === 'string' &&
+    value.storeName.trim().length > 0 &&
     ['existing', 'proposed', 'candidate'].includes(String(value.status)) &&
     isFiniteNumber(value.latitude) &&
     value.latitude >= -90 &&
@@ -114,10 +117,15 @@ function isFlow(value: unknown): value is CannibalizationFlow {
   const incrementalVisitors = value.incrementalCandidateVisitors;
 
   return (
+    Object.keys(value).length === 13 &&
     typeof value.scenarioId === 'string' &&
+    value.scenarioId.trim().length > 0 &&
     typeof value.existingStoreId === 'string' &&
+    value.existingStoreId.trim().length > 0 &&
     typeof value.candidateStoreId === 'string' &&
-    typeof value.trafficDateLocal === 'string' &&
+    value.candidateStoreId.trim().length > 0 &&
+    value.existingStoreId !== value.candidateStoreId &&
+    isIsoLocalDate(value.trafficDateLocal) &&
     ['morning_commute', 'midday', 'evening_commute', 'off_peak'].includes(
       String(value.daypart)
     ) &&
@@ -168,12 +176,43 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
   }
 
   const storeIds = new Set(value.stores.map((store) => store.storeId));
+  if (storeIds.size !== value.stores.length) {
+    throw new Error('Dashboard response contains duplicate store IDs.');
+  }
+
   const hasMissingStore = value.flows.some(
     (flow) => !storeIds.has(flow.existingStoreId) || !storeIds.has(flow.candidateStoreId)
   );
 
   if (hasMissingStore) {
     throw new Error('Dashboard flow references a store that is not in the response.');
+  }
+
+  const storesById = new Map(value.stores.map((store) => [store.storeId, store]));
+  const scenarioIds = new Set<string>();
+  const flowGrains = new Set<string>();
+  for (const flow of value.flows) {
+    if (
+      storesById.get(flow.existingStoreId)?.status !== 'existing' ||
+      !['proposed', 'candidate'].includes(storesById.get(flow.candidateStoreId)?.status ?? '')
+    ) {
+      throw new Error('Dashboard flow store roles do not match existing/candidate statuses.');
+    }
+    if (scenarioIds.has(flow.scenarioId)) {
+      throw new Error('Dashboard response contains duplicate scenario IDs.');
+    }
+    scenarioIds.add(flow.scenarioId);
+
+    const grain = [
+      flow.existingStoreId,
+      flow.candidateStoreId,
+      flow.trafficDateLocal,
+      flow.daypart
+    ].join('\u0000');
+    if (flowGrains.has(grain)) {
+      throw new Error('Dashboard response contains duplicate store/daypart flows.');
+    }
+    flowGrains.add(grain);
   }
 
   if (!Array.isArray(value.hourlyFootfall) || !value.hourlyFootfall.every(isHourlyFootfall)) {
