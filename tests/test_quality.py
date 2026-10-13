@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from geopulse.quality import (
+    BATCH_SUCCESS_MARKER,
     SpatialQualityError,
     SpatialQualityPolicy,
     load_spatial_audit,
@@ -61,11 +62,13 @@ class SpatialQualityTests(unittest.TestCase):
                 for metric, value in chunk:
                     handle.write(json.dumps({"metric": metric, "value": value}) + "\n")
         (self.audit_path / "_SUCCESS").write_text("ignored", encoding="utf-8")
+        (self.root / BATCH_SUCCESS_MARKER).touch()
 
     def _write_match_parquet(self) -> None:
         partition = self.matches_path / "event_date=2026-09-28" / "event_hour_utc=8"
         partition.mkdir(parents=True, exist_ok=True)
         (partition / "part-00000.parquet").write_bytes(b"PAR1\x00\x00\x00\x00PAR1")
+        (self.matches_path / "_SUCCESS").touch()
 
     def test_valid_output_passes_with_partitioned_parquet(self) -> None:
         records = list(VALID_METRICS.items())
@@ -77,6 +80,28 @@ class SpatialQualityTests(unittest.TestCase):
         self.assertEqual(report.metrics, VALID_METRICS)
         self.assertAlmostEqual(report.ping_rejection_rate, 0.01)
         self.assertEqual(report.as_dict()["status"], "passed")
+
+    def test_incomplete_output_rejects_each_missing_completion_marker(self) -> None:
+        self._write_audit(list(VALID_METRICS.items()))
+        self._write_match_parquet()
+
+        for marker in (
+            self.root / BATCH_SUCCESS_MARKER,
+            self.audit_path / "_SUCCESS",
+            self.matches_path / "_SUCCESS",
+        ):
+            with self.subTest(marker=marker.name):
+                marker.unlink()
+                with self.assertRaisesRegex(SpatialQualityError, "output is incomplete"):
+                    validate_spatial_output(self.audit_path, self.matches_path, self.policy)
+                marker.touch()
+
+    def test_output_requires_sibling_audit_and_matches_directories(self) -> None:
+        self._write_audit(list(VALID_METRICS.items()))
+        self._write_match_parquet()
+
+        with self.assertRaisesRegex(SpatialQualityError, "sibling output directories"):
+            validate_spatial_output(self.audit_path, self.root / "other-matches", self.policy)
 
     def test_audit_requires_every_metric_exactly_once(self) -> None:
         records = list(VALID_METRICS.items())
@@ -203,6 +228,7 @@ class SpatialQualityTests(unittest.TestCase):
     def test_output_requires_a_recursive_parquet_part(self) -> None:
         self._write_audit(list(VALID_METRICS.items()))
         self.matches_path.mkdir()
+        (self.matches_path / "_SUCCESS").touch()
 
         with self.assertRaisesRegex(SpatialQualityError, "contain no Parquet files"):
             validate_spatial_output(self.audit_path, self.matches_path, self.policy)
@@ -217,11 +243,11 @@ class SpatialQualityTests(unittest.TestCase):
 
         for name, payload, message in cases:
             with self.subTest(name=name):
-                matches_path = self.root / f"matches-{name}"
-                matches_path.mkdir()
-                (matches_path / "part-00000.parquet").write_bytes(payload)
+                self.matches_path.mkdir(exist_ok=True)
+                (self.matches_path / "_SUCCESS").touch()
+                (self.matches_path / "part-00000.parquet").write_bytes(payload)
                 with self.assertRaisesRegex(SpatialQualityError, message):
-                    validate_spatial_output(self.audit_path, matches_path, self.policy)
+                    validate_spatial_output(self.audit_path, self.matches_path, self.policy)
 
     def test_cli_returns_structured_success_and_nonzero_failure(self) -> None:
         self._write_audit(list(VALID_METRICS.items()))

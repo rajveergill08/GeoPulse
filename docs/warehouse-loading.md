@@ -48,7 +48,9 @@ geopulse-load-spatial \
 ```
 
 The preview reruns the spatial quality gate and reports file paths, audit counts, target table,
-and timestamp bounds. It does not import the connector or request credentials. Remove
+and timestamp bounds. It requires `_GEOPULSE_SUCCESS` in the common output parent and Spark
+`_SUCCESS` files in `audit/` and `matches/`. An incomplete batch is rejected before any
+credentials or Snowflake connection are requested. Remove
 `--dry-run` to publish after provisioning and configuring the worker.
 
 September 29 in Asia/Kolkata corresponds to the half-open UTC interval
@@ -58,7 +60,8 @@ This boundary is aligned with GeoPulse's Bengaluru generator and retail-local db
 
 ## Publication sequence
 
-1. Validate the local audit and every discovered Parquet part using the existing quality policy.
+1. Require matching sibling audit/matches directories and all completion markers, then validate
+   the local audit and every discovered Parquet part using the existing quality policy.
 2. Create a unique session-scoped temporary stage and temporary table shaped like the source.
 3. Upload each exact Parquet path to a separate numbered stage directory and confirm its PUT
    result. Numbered directories preserve parts with identical basenames across UTC partitions.

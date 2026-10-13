@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from geopulse.quality import SpatialQualityPolicy
+from geopulse.quality import BATCH_SUCCESS_MARKER, SpatialQualityPolicy
 from geopulse.warehouse import (
     BatchLoadConfig,
     main,
@@ -192,11 +192,14 @@ class WarehouseBatchTests(unittest.TestCase):
         with (self.audit / "part-00000.json").open("w", encoding="utf-8") as handle:
             for metric, value in metrics.items():
                 handle.write(json.dumps({"metric": metric, "value": value}) + "\n")
+        (self.audit / "_SUCCESS").touch()
         # Spark can emit the same part basename in different UTC partitions.
         for partition in ("event_date=2026-09-28", "event_date=2026-09-29"):
             destination = self.matches / partition
             destination.mkdir(parents=True)
             (destination / "part-00000.parquet").write_bytes(b"PAR1\x00\x00\x00\x00PAR1")
+        (self.matches / "_SUCCESS").touch()
+        (self.root / BATCH_SUCCESS_MARKER).touch()
         self.config = BatchLoadConfig(
             run_date=date(2026, 9, 29),
             matches_path=self.matches,
@@ -369,6 +372,19 @@ class WarehouseBatchTests(unittest.TestCase):
             self.assertEqual(main(arguments), 1)
         connect.assert_not_called()
         self.assertIn("expected 5", error.getvalue())
+
+    def test_incomplete_batch_blocks_loader_before_credentials_or_connection(self) -> None:
+        (self.root / BATCH_SUCCESS_MARKER).unlink()
+        error = StringIO()
+        with (
+            patch("geopulse.warehouse.read_connection_settings") as settings,
+            patch("geopulse.warehouse.connect_snowflake") as connect,
+            redirect_stderr(error),
+        ):
+            self.assertEqual(main(self._arguments()), 1)
+        settings.assert_not_called()
+        connect.assert_not_called()
+        self.assertIn(BATCH_SUCCESS_MARKER, error.getvalue())
 
     def test_connection_settings_require_one_authentication_method(self) -> None:
         environment = {

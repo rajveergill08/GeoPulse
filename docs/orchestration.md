@@ -21,6 +21,8 @@ The preflight task checks the spatial loader command, executables, store referen
 and data root before the 9.6-million-row default workload can start. The raw publisher validates
 the generated CSV and publishes native GEOGRAPHY points before Sedona begins. The spatial quality
 task then checks the completed join before matched rows can reach Snowflake.
+It requires the batch-level completion marker plus Spark's audit and match completion markers;
+retries invalidate the batch marker before replacing any spatial output.
 
 `geopulse_daily_pipeline` runs at 02:00 in `Asia/Kolkata`, does not create historical runs
 automatically (`catchup=False`), and permits only one active run. Each task retries twice after a

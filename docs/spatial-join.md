@@ -31,6 +31,15 @@ All timestamps are normalized to UTC by the Spark session. The match output is p
 | `rejected_stores/` | Parquet | Invalid or duplicate stores with a rejection reason. |
 | `audit/` | JSON | Raw, valid, rejected, match, and unique-device counts. |
 
+Every write attempt removes the previous root-level `_GEOPULSE_SUCCESS` marker before writing
+any output. An overwrite recreates it only after all five Spark outputs have finished successfully.
+The audit and matches directories also contain Spark's own `_SUCCESS` files. The quality gate
+requires all three markers, the audit metrics, and Parquet parts with valid magic bytes before
+publication.
+An interrupted retry therefore remains unpublishable even if older audit files are still present.
+Only `--write-mode overwrite` produces a publishable batch; other modes are for exploratory use.
+Use one writer per output path and do not modify files between validation and loading.
+
 One ping may match multiple overlapping catchments. That behavior is intentional: it preserves
 the overlap needed to calculate Store A/Store B cannibalization in Week 3.
 

@@ -12,6 +12,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from geopulse.quality import BATCH_SUCCESS_MARKER
+
 SEDONA_VERSION = "1.9.0"
 SPARK_VERSION = "4.0.4"
 SCALA_BINARY_VERSION = "2.13"
@@ -316,6 +318,33 @@ def _partition_matches_for_write(matches: Any, shuffle_partitions: int) -> Any:
     )
 
 
+def _batch_marker_filesystem(spark: Any, output_path: str) -> tuple[Any, Any]:
+    """Resolve the marker with Spark's filesystem, including HDFS/object-store URIs."""
+
+    context = spark.sparkContext
+    marker = context._jvm.org.apache.hadoop.fs.Path(_child_path(output_path, BATCH_SUCCESS_MARKER))
+    return marker.getFileSystem(context._jsc.hadoopConfiguration()), marker
+
+
+def _invalidate_batch_marker(spark: Any, output_path: str) -> None:
+    """Fail closed before any output is replaced by a new attempt."""
+
+    filesystem, marker = _batch_marker_filesystem(spark, output_path)
+    if filesystem.exists(marker):
+        if not filesystem.getFileStatus(marker).isFile():
+            raise RuntimeError(f"Spatial batch marker is not a file: {marker}")
+        if not filesystem.delete(marker, False):
+            raise RuntimeError(f"Unable to invalidate spatial batch marker: {marker}")
+
+
+def _mark_batch_complete(spark: Any, output_path: str) -> None:
+    """Publish the batch marker only after every Spark writer has returned."""
+
+    filesystem, marker = _batch_marker_filesystem(spark, output_path)
+    stream = filesystem.create(marker, False)
+    stream.close()
+
+
 def _write_outputs(
     spark: Any,
     config: SpatialJoinConfig,
@@ -324,6 +353,7 @@ def _write_outputs(
 ) -> None:
     functions, _ = _require_spatial_dependencies()
     mode = config.write_mode.lower()
+    _invalidate_batch_marker(spark, config.output_path)
     (
         _partition_matches_for_write(frames.matches, config.shuffle_partitions)
         .write.mode(mode)
@@ -346,6 +376,9 @@ def _write_outputs(
         .write.mode(mode)
         .json(_child_path(config.output_path, "audit"))
     )
+    # Append/ignore can reuse older parts, so only a full overwrite is publishable.
+    if mode == "overwrite":
+        _mark_batch_complete(spark, config.output_path)
 
 
 def run_spatial_join(config: SpatialJoinConfig) -> dict[str, int | str]:

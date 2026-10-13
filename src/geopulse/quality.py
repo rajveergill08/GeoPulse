@@ -27,6 +27,7 @@ REQUIRED_AUDIT_METRICS = frozenset(
         "matched_unique_devices",
     }
 )
+BATCH_SUCCESS_MARKER = "_GEOPULSE_SUCCESS"
 
 
 class SpatialQualityError(ValueError):
@@ -224,6 +225,12 @@ def require_match_parquet(matches_path: Path | str) -> Path:
     return first_parquet_file
 
 
+def _require_success_marker(directory: Path, marker_name: str) -> None:
+    marker = directory / marker_name
+    if not marker.is_file():
+        raise SpatialQualityError(f"Spatial output is incomplete; missing {marker}")
+
+
 def validate_spatial_output(
     audit_path: Path | str,
     matches_path: Path | str,
@@ -231,14 +238,26 @@ def validate_spatial_output(
 ) -> SpatialQualityReport:
     """Validate a complete spatial batch before warehouse publication."""
 
-    metrics = load_spatial_audit(audit_path)
+    audit_directory = Path(audit_path).expanduser().resolve()
+    matches_directory = Path(matches_path).expanduser().resolve()
+    if (
+        audit_directory.name != "audit"
+        or matches_directory.name != "matches"
+        or audit_directory.parent != matches_directory.parent
+    ):
+        raise SpatialQualityError("Spatial audit and matches must be sibling output directories")
+
+    _require_success_marker(audit_directory.parent, BATCH_SUCCESS_MARKER)
+    _require_success_marker(audit_directory, "_SUCCESS")
+    _require_success_marker(matches_directory, "_SUCCESS")
+    metrics = load_spatial_audit(audit_directory)
     ping_rejection_rate = validate_spatial_metrics(metrics, policy)
-    require_match_parquet(matches_path)
+    require_match_parquet(matches_directory)
     return SpatialQualityReport(
         metrics=metrics,
         ping_rejection_rate=ping_rejection_rate,
-        audit_path=str(Path(audit_path).expanduser().resolve()),
-        matches_path=str(Path(matches_path).expanduser().resolve()),
+        audit_path=str(audit_directory),
+        matches_path=str(matches_directory),
     )
 
 
