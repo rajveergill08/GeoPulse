@@ -76,7 +76,9 @@ DAYPARTS = frozenset({"morning_commute", "midday", "evening_commute", "off_peak"
 RATE_TOLERANCE = Decimal("0.000001")  # dbt rounds rates to six decimal places.
 MAX_SAFE_JS_INTEGER = 2**53 - 1
 PUBLICATION_LOCK_TIMEOUT_SECONDS = 30
-# One extra row lets the exporter reject an oversized day rather than silently truncating it.
+# Query one extra row so an oversized day fails instead of being silently truncated.
+MAX_COMPARISON_ROWS_PER_DAY = 20_000
+MAX_HOURLY_ROWS_PER_DAY = 120_000
 MAX_H3_ROWS_PER_DAY = 50_000
 
 
@@ -243,14 +245,18 @@ def fetch_aggregate_rows(connection: Any, config: DashboardExportConfig) -> list
     sql = (
         f"SELECT {', '.join(MART_COLUMNS)} FROM {config.mart_table} "
         "WHERE TRAFFIC_DATE_LOCAL = TO_DATE(%s) "
-        "ORDER BY EXISTING_STORE_ID, CANDIDATE_STORE_ID, TRAFFIC_DATE_LOCAL, DAYPART"
+        "ORDER BY EXISTING_STORE_ID, CANDIDATE_STORE_ID, TRAFFIC_DATE_LOCAL, DAYPART "
+        f"LIMIT {MAX_COMPARISON_ROWS_PER_DAY + 1}"
     )
     with connection.cursor() as cursor:
         cursor.execute(sql, (config.run_date.isoformat(),))
         names = tuple(column[0].lower() for column in cursor.description)
         if names != MART_COLUMNS:
             raise DashboardExportError("Snowflake mart returned unexpected aggregate columns")
-        return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        if len(rows) > MAX_COMPARISON_ROWS_PER_DAY:
+            raise DashboardExportError("Store comparison feed exceeds the daily export row limit")
+        return [dict(zip(names, row, strict=True)) for row in rows]
 
 
 def fetch_hourly_rows(connection: Any, config: DashboardExportConfig) -> list[dict[str, Any]]:
@@ -259,7 +265,8 @@ def fetch_hourly_rows(connection: Any, config: DashboardExportConfig) -> list[di
     sql = (
         f"SELECT {', '.join(HOURLY_COLUMNS)} FROM {config.hourly_mart_table} "
         "WHERE TRAFFIC_DATE_LOCAL = TO_DATE(%s) "
-        "ORDER BY STORE_ID, TRAFFIC_DATE_LOCAL, EVENT_HOUR_LOCAL"
+        "ORDER BY STORE_ID, TRAFFIC_DATE_LOCAL, EVENT_HOUR_LOCAL "
+        f"LIMIT {MAX_HOURLY_ROWS_PER_DAY + 1}"
     )
     with connection.cursor() as cursor:
         cursor.execute(sql, (config.run_date.isoformat(),))
@@ -268,7 +275,10 @@ def fetch_hourly_rows(connection: Any, config: DashboardExportConfig) -> list[di
             raise DashboardExportError(
                 "Snowflake hourly mart returned unexpected aggregate columns"
             )
-        return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        if len(rows) > MAX_HOURLY_ROWS_PER_DAY:
+            raise DashboardExportError("Hourly footfall feed exceeds the daily export row limit")
+        return [dict(zip(names, row, strict=True)) for row in rows]
 
 
 def fetch_h3_rows(connection: Any, config: DashboardExportConfig) -> list[dict[str, Any]]:

@@ -18,7 +18,9 @@ from geopulse.dashboard_export import (
     H3_COLUMNS,
     HOURLY_COLUMNS,
     MART_COLUMNS,
+    MAX_COMPARISON_ROWS_PER_DAY,
     MAX_H3_ROWS_PER_DAY,
+    MAX_HOURLY_ROWS_PER_DAY,
     DashboardExportConfig,
     DashboardExportError,
     build_snapshot,
@@ -257,6 +259,7 @@ class DashboardExportTests(unittest.TestCase):
         self.assertIn(", ".join(MART_COLUMNS), sql)
         self.assertIn(self.config.mart_table, sql)
         self.assertIn("TO_DATE(%s)", sql)
+        self.assertIn(f"LIMIT {MAX_COMPARISON_ROWS_PER_DAY + 1}", sql)
         self.assertNotIn("2026-09-30", sql)
         self.assertNotIn("DEVICE_ID", sql)
         self.assertNotIn("PING_LATITUDE", sql)
@@ -274,6 +277,7 @@ class DashboardExportTests(unittest.TestCase):
         self.assertIn(", ".join(HOURLY_COLUMNS), sql)
         self.assertIn(self.config.hourly_mart_table, sql)
         self.assertIn("TO_DATE(%s)", sql)
+        self.assertIn(f"LIMIT {MAX_HOURLY_ROWS_PER_DAY + 1}", sql)
         self.assertNotIn("2026-09-30", sql)
         self.assertNotIn("DEVICE_ID", sql)
         self.assertNotIn("LATITUDE", sql)
@@ -306,6 +310,24 @@ class DashboardExportTests(unittest.TestCase):
         connection.h3_rows = [h3_row()] * (MAX_H3_ROWS_PER_DAY + 1)
         with self.assertRaisesRegex(DashboardExportError, "safe daily export row limit"):
             fetch_h3_rows(connection, self.config)
+
+    def test_comparison_query_rejects_oversized_day_without_truncating(self) -> None:
+        connection = FakeConnection(rows=[mart_row(), mart_row()])
+        with patch("geopulse.dashboard_export.MAX_COMPARISON_ROWS_PER_DAY", 2):
+            self.assertEqual(len(fetch_aggregate_rows(connection, self.config)), 2)
+            self.assertIn("LIMIT 3", connection.statements[-1][0])
+            connection.rows.append(mart_row())
+            with self.assertRaisesRegex(DashboardExportError, "comparison feed exceeds"):
+                fetch_aggregate_rows(connection, self.config)
+
+    def test_hourly_query_rejects_oversized_day_without_truncating(self) -> None:
+        connection = FakeConnection(hourly_rows=[hourly_row(), hourly_row(store_id="store_b")])
+        with patch("geopulse.dashboard_export.MAX_HOURLY_ROWS_PER_DAY", 2):
+            self.assertEqual(len(fetch_hourly_rows(connection, self.config)), 2)
+            self.assertIn("LIMIT 3", connection.statements[-1][0])
+            connection.hourly_rows.append(hourly_row(store_id="store_c"))
+            with self.assertRaisesRegex(DashboardExportError, "Hourly footfall feed exceeds"):
+                fetch_hourly_rows(connection, self.config)
 
     def test_mart_column_mismatch_is_rejected(self) -> None:
         connection = FakeConnection()
@@ -886,6 +908,22 @@ class DashboardExportTests(unittest.TestCase):
             redirect_stderr(StringIO()),
         ):
             self.assertEqual(main(self._args()), 1)
+        self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
+        self.assertTrue(connection.closed)
+
+    def test_cli_oversized_hourly_day_preserves_previous_snapshot(self) -> None:
+        self.output_path.parent.mkdir()
+        self.output_path.write_text("old-good-snapshot", encoding="utf-8")
+        connection = FakeConnection()
+        error = StringIO()
+        with (
+            patch("geopulse.dashboard_export.MAX_HOURLY_ROWS_PER_DAY", 1),
+            patch("geopulse.dashboard_export.read_dashboard_connection_settings", return_value={}),
+            patch("geopulse.dashboard_export.connect_snowflake", return_value=connection),
+            redirect_stderr(error),
+        ):
+            self.assertEqual(main(self._args()), 1)
+        self.assertIn("Hourly footfall feed exceeds", error.getvalue())
         self.assertEqual(self.output_path.read_text(encoding="utf-8"), "old-good-snapshot")
         self.assertTrue(connection.closed)
 

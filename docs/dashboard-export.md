@@ -49,8 +49,10 @@ It also includes `h3Footfall`: citywide resolution-8 H3 cell-hour observations w
 device identifiers or raw coordinates enter this feed. The H3 counts come from raw pings before
 store-catchment joins, so one device can appear in several cells or hours; summing cell-hour
 unique visitors is not a distinct daily citywide visitor count. H3 cells are not measured
-store-to-store paths. The exporter selects only the requested local date, caps the day at 50,000
-rows, and rejects an oversized feed rather than silently truncating it.
+store-to-store paths. The exporter selects only the requested local date. Its per-day caps are
+20,000 store-pair/daypart rows, 120,000 store-hour rows, and 50,000 H3 cell-hour rows. Each query
+requests one extra row and rejects an oversized feed rather than silently truncating a dashboard
+decision. Review the dashboard's memory and scenario scope before raising these limits.
 The ordered count must be a non-negative, JavaScript-safe integer no larger than shared visitors;
 it is a daypart diagnostic, not an observed route or causal diversion rate. Hourly
 `uniqueVisitors` counts distinct devices within that store-hour only: adding them across hours
