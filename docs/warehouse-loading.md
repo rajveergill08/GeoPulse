@@ -68,7 +68,13 @@ This boundary is aligned with GeoPulse's Bengaluru generator and retail-local db
 4. COPY that isolated stage into the temporary table with `ON_ERROR=ABORT_STATEMENT`, explicit
    Parquet field types, and logical timestamp handling.
 5. Reconcile COPY and temporary-table row counts plus unique devices with the audit. Reject
-   out-of-day timestamps, blank identifiers, unsupported statuses, and duplicate ping/store keys.
+   out-of-day timestamps, blank identifiers or store names, unsupported statuses, and duplicate
+   ping/store keys. Before touching the target, also reject missing or out-of-range coordinates
+   (latitude `[-90, 90]`, longitude `[-180, 180]`), catchment radii outside `[1, 10000]` metres,
+   and missing, negative, or non-finite distances. Distance may be zero and is not constrained
+   to the radius: the spatial buffer and distance calculation use different geodetic
+   approximations. Accuracy may be missing or zero, but a present value must be finite and
+   non-negative.
 6. Begin a transaction, delete only the local day's UTC interval, insert the validated rows,
    verify the target count, and commit. Roll back on failure.
 

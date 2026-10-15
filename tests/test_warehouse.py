@@ -277,6 +277,40 @@ class WarehouseBatchTests(unittest.TestCase):
         destinations = [sql.split(" @", 1)[1].split()[0] for sql in uploads]
         self.assertEqual(len(set(destinations)), 2)
 
+    def test_landing_query_checks_spatial_values_before_replacement(self) -> None:
+        publish_spatial_batch(self.connection, self.plan)
+        statements = self.connection.statements
+        checks = [
+            (index, sql, params)
+            for index, (sql, params) in enumerate(statements)
+            if "COUNT_IF" in sql
+        ]
+        self.assertEqual(len(checks), 1)
+        index, sql, params = checks[0]
+        self.assertLess(
+            index, next(i for i, (text, _) in enumerate(statements) if text == "BEGIN TRANSACTION")
+        )
+        self.assertIn("COALESCE(COUNT_IF(NOT COALESCE(", sql)
+        for condition in (
+            "EVENT_TS IS NOT NULL",
+            "EVENT_TS >= %S::TIMESTAMP_NTZ AND EVENT_TS < %S::TIMESTAMP_NTZ",
+            "DEVICE_ID IS NOT NULL AND TRIM(DEVICE_ID) <> ''",
+            "STORE_ID IS NOT NULL AND TRIM(STORE_ID) <> ''",
+            "STORE_NAME IS NOT NULL AND TRIM(STORE_NAME) <> ''",
+            "STORE_STATUS IN ('EXISTING', 'PROPOSED', 'CANDIDATE')",
+            "PING_LATITUDE BETWEEN -90 AND 90",
+            "PING_LONGITUDE BETWEEN -180 AND 180",
+            "CATCHMENT_RADIUS_M BETWEEN 1 AND 10000",
+            "ACCURACY_M IS NULL OR (ACCURACY_M >= 0 AND ACCURACY_M <= 1.7976931348623157E308)",
+            "DISTANCE_TO_STORE_M BETWEEN 0 AND 1.7976931348623157E308",
+        ):
+            with self.subTest(condition=condition):
+                self.assertIn(condition, sql)
+        self.assertEqual(
+            params,
+            tuple(value.strftime("%Y-%m-%d %H:%M:%S") for value in self.config.utc_window),
+        )
+
     def test_landing_validation_failures_never_begin_target_transaction(self) -> None:
         cases = (((3, 3, 0), 0), ((4, 2, 0), 0), ((4, 3, 1), 0), ((4, 3, 0), 1))
         for summary, duplicates in cases:
@@ -291,6 +325,9 @@ class WarehouseBatchTests(unittest.TestCase):
                 self.assertFalse(any(sql.startswith("BEGIN") for sql, _ in connection.statements))
                 self.assertFalse(
                     any(sql.startswith("DELETE FROM") for sql, _ in connection.statements)
+                )
+                self.assertFalse(
+                    any(sql.startswith("INSERT INTO") for sql, _ in connection.statements)
                 )
                 self.assertEqual(connection.commits, 0)
 

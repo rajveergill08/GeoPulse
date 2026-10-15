@@ -38,6 +38,7 @@ MATCH_COLUMNS = (
     "distance_to_store_m",
     "source_filename",
 )
+MAX_FINITE_FLOAT_SQL = "1.7976931348623157e308"
 
 
 class WarehouseLoadError(ValueError):
@@ -148,6 +149,31 @@ def _copy_statement(landing_table: str, stage: str) -> str:
     )
 
 
+def _landing_validation_sql(landing_table: str, window: str) -> str:
+    """Count rows that cannot safely enter the published spatial source."""
+
+    valid = " AND ".join(
+        (
+            "event_ts IS NOT NULL",
+            f"({window})",
+            "device_id IS NOT NULL AND TRIM(device_id) <> ''",
+            "store_id IS NOT NULL AND TRIM(store_id) <> ''",
+            "store_name IS NOT NULL AND TRIM(store_name) <> ''",
+            "store_status IN ('existing', 'proposed', 'candidate')",
+            "ping_latitude BETWEEN -90 AND 90",
+            "ping_longitude BETWEEN -180 AND 180",
+            "catchment_radius_m BETWEEN 1 AND 10000",
+            f"(accuracy_m IS NULL OR (accuracy_m >= 0 AND accuracy_m <= {MAX_FINITE_FLOAT_SQL}))",
+            f"distance_to_store_m BETWEEN 0 AND {MAX_FINITE_FLOAT_SQL}",
+        )
+    )
+    # A NULL predicate is invalid too; COUNT_IF alone would not count it.
+    return (
+        "SELECT COUNT(*), COUNT(DISTINCT device_id), "
+        f"COALESCE(COUNT_IF(NOT COALESCE({valid}, FALSE)), 0) FROM {landing_table}"
+    )
+
+
 def publish_spatial_batch(connection: Any, plan: SpatialLoadPlan) -> dict[str, Any]:
     """Upload and validate a batch, then replace its UTC interval in one transaction.
 
@@ -191,18 +217,12 @@ def publish_spatial_batch(connection: Any, plan: SpatialLoadPlan) -> dict[str, A
         ):
             raise WarehouseLoadError("COPY results do not match the spatial audit")
 
-        cursor.execute(
-            f"SELECT COUNT(*), COUNT(DISTINCT device_id), COALESCE(COUNT_IF("
-            f"event_ts IS NULL OR NOT ({window}) "
-            "OR device_id IS NULL OR TRIM(device_id) = '' "
-            "OR store_id IS NULL OR TRIM(store_id) = '' "
-            "OR store_status IS NULL OR store_status NOT IN ('existing', 'proposed', 'candidate')"
-            f"), 0) FROM {landing}",
-            (start, end),
-        )
+        cursor.execute(_landing_validation_sql(landing, window), (start, end))
         summary = cursor.fetchone()
         if summary is None or tuple(summary) != (expected_rows, expected_devices, 0):
-            raise WarehouseLoadError("Loaded counts, device IDs, or retail-day bounds are invalid")
+            raise WarehouseLoadError(
+                "Loaded counts, identities, time, or spatial values are invalid"
+            )
         cursor.execute(
             f"SELECT COUNT(*) FROM (SELECT device_id, event_ts, store_id FROM {landing} "
             "GROUP BY device_id, event_ts, store_id HAVING COUNT(*) > 1)"
