@@ -7,8 +7,9 @@ a 500-metre radius for every location.
 ## Processing contract
 
 1. Read ping and store CSV files with explicit schemas; never infer numeric production fields.
-2. Reject missing identifiers, malformed timestamps, invalid coordinates, negative accuracy, and
-   catchment radii outside 1-10,000 metres.
+2. Reject missing identifiers, malformed timestamps, invalid coordinates, negative or non-finite
+   accuracy, unsupported store statuses, and catchment radii outside 1-10,000 metres. Accuracy
+   may be missing or zero; supported statuses are `existing`, `proposed`, and `candidate`.
 3. Retain one deterministic record for each ping `(device_id, event_ts)` key and each `store_id`;
    route duplicates to rejected outputs with a reason.
 4. Create longitude/latitude points with SRID 4326.

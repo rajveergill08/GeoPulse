@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -169,7 +170,11 @@ def prepare_pings(raw_pings: Any) -> tuple[Any, Any]:
             "invalid_longitude",
         )
         .when(
-            functions.col("accuracy_m").isNotNull() & (functions.col("accuracy_m") < 0.0),
+            functions.col("accuracy_m").isNotNull()
+            & (
+                functions.isnan("accuracy_m")
+                | ~functions.col("accuracy_m").between(0.0, sys.float_info.max)
+            ),
             "invalid_accuracy",
         )
     )
@@ -211,6 +216,10 @@ def prepare_stores(raw_stores: Any) -> tuple[Any, Any]:
         functions.when(_empty_or_null(functions.col("store_id"), functions), "missing_store_id")
         .when(_empty_or_null(functions.col("store_name"), functions), "missing_store_name")
         .when(_empty_or_null(functions.col("status"), functions), "missing_status")
+        .when(
+            ~functions.col("status").isin("existing", "proposed", "candidate"),
+            "invalid_status",
+        )
         .when(
             functions.col("latitude").isNull() | ~functions.col("latitude").between(-90.0, 90.0),
             "invalid_latitude",

@@ -12,7 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from geopulse.quality import (
     BATCH_SUCCESS_MARKER,
+    SpatialQualityError,
     SpatialQualityPolicy,
+    validate_spatial_metrics,
     validate_spatial_output,
 )
 from geopulse.spatial import (
@@ -198,6 +200,82 @@ class SedonaSpatialIntegrationTests(unittest.TestCase):
         self.assertTrue(catchments[0].catchment_wkt.startswith("POLYGON"))
         self.assertEqual(rejected_pings[0].rejection_reason, "invalid_event_timestamp")
         self.assertEqual(rejected_stores[0].rejection_reason, "invalid_latitude")
+
+    def test_nonfinite_accuracy_and_unsupported_status_are_rejected_at_source(self) -> None:
+        pings = self.spark.createDataFrame(
+            [
+                ("zero", "2026-09-20T08:00:00+05:30", 12.9756, 77.6066, 0.0, "work"),
+                ("missing", "2026-09-20T08:00:00+05:30", 12.9756, 77.6066, None, "work"),
+                ("nan", "2026-09-20T08:00:00+05:30", 12.9756, 77.6066, float("nan"), "work"),
+                (
+                    "positive_inf",
+                    "2026-09-20T08:00:00+05:30",
+                    12.9756,
+                    77.6066,
+                    float("inf"),
+                    "work",
+                ),
+                (
+                    "negative_inf",
+                    "2026-09-20T08:00:00+05:30",
+                    12.9756,
+                    77.6066,
+                    float("-inf"),
+                    "work",
+                ),
+            ],
+            "device_id string, event_ts string, latitude double, longitude double, "
+            "accuracy_m double, activity_type string",
+        )
+        stores = self.spark.createDataFrame(
+            [
+                ("store_a", "Store A", "existing", 12.9756, 77.6066, 500.0),
+                ("store_unknown", "Unknown Store", "unknown", 12.9756, 77.6066, 500.0),
+            ],
+            "store_id string, store_name string, status string, latitude double, "
+            "longitude double, catchment_radius_m double",
+        )
+
+        frames = build_spatial_frames(pings, stores)
+        valid_pings = frames.valid_pings.select("device_id").collect()
+        valid_stores = frames.valid_stores.select("store_id").collect()
+        rejected_pings = frames.rejected_pings.select("device_id", "rejection_reason").collect()
+        rejected_stores = frames.rejected_stores.select("store_id", "rejection_reason").collect()
+        matches = frames.matches.select("device_id", "store_id").collect()
+
+        self.assertEqual({row.device_id for row in valid_pings}, {"zero", "missing"})
+        self.assertEqual({row.store_id for row in valid_stores}, {"store_a"})
+        self.assertEqual(
+            {row.device_id: row.rejection_reason for row in rejected_pings},
+            {
+                "nan": "invalid_accuracy",
+                "positive_inf": "invalid_accuracy",
+                "negative_inf": "invalid_accuracy",
+            },
+        )
+        self.assertEqual(
+            [(row.store_id, row.rejection_reason) for row in rejected_stores],
+            [("store_unknown", "invalid_status")],
+        )
+        self.assertEqual(
+            {(row.device_id, row.store_id) for row in matches},
+            {("zero", "store_a"), ("missing", "store_a")},
+        )
+
+        metrics = {
+            "raw_ping_rows": 5,
+            "valid_ping_rows": len(valid_pings),
+            "rejected_ping_rows": len(rejected_pings),
+            "raw_store_rows": 2,
+            "valid_store_rows": len(valid_stores),
+            "rejected_store_rows": len(rejected_stores),
+            "matched_ping_store_rows": len(matches),
+            "matched_unique_devices": len({row.device_id for row in matches}),
+        }
+        with self.assertRaisesRegex(SpatialQualityError, "rejected_store_rows exceeds"):
+            validate_spatial_metrics(
+                metrics, SpatialQualityPolicy(expected_ping_rows=5, max_ping_rejection_rate=1.0)
+            )
 
     def test_match_write_distributes_one_hour_without_changing_parquet_layout(self) -> None:
         from pyspark.sql import functions
