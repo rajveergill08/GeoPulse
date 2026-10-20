@@ -199,9 +199,9 @@ def read_stores(path: Path) -> list[dict[str, Any]]:
                     )
                 latitude = _positive_float(row["latitude"], "latitude", lower=-90, upper=90)
                 longitude = _positive_float(row["longitude"], "longitude", lower=-180, upper=180)
-                radius = _positive_float(row["catchment_radius_m"], "catchment radius")
-                if radius <= 0:
-                    raise DashboardExportError("Store catchment radius must be positive")
+                radius = _positive_float(
+                    row["catchment_radius_m"], "catchment radius", lower=1, upper=10_000
+                )
                 stores.append(
                     {
                         "storeId": store_id,

@@ -235,6 +235,22 @@ describe('parseDashboardSnapshot', () => {
     );
   });
 
+  it('accepts only the supported 1–10,000 metre store catchment radius', () => {
+    for (const radius of [1, 10000]) {
+      const snapshot = validSnapshot();
+      snapshot.stores[0].catchmentRadiusM = radius;
+      expect(parseDashboardSnapshot(snapshot)).toEqual(snapshot);
+    }
+
+    for (const radius of [0.5, 10000.1]) {
+      const snapshot = validSnapshot();
+      snapshot.stores[0].catchmentRadiusM = radius;
+      expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+        'Dashboard response contains invalid store metadata.'
+      );
+    }
+  });
+
   it('requires the referenced stores to have the correct comparison roles', () => {
     const wrongExisting = validSnapshot();
     wrongExisting.stores[0].status = 'proposed';

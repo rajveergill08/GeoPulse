@@ -101,7 +101,8 @@ function isStore(value: unknown): value is StoreMetric {
     value.longitude >= -180 &&
     value.longitude <= 180 &&
     isFiniteNumber(value.catchmentRadiusM) &&
-    value.catchmentRadiusM > 0
+    value.catchmentRadiusM >= 1 &&
+    value.catchmentRadiusM <= 10000
   );
 }
 

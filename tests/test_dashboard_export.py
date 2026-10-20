@@ -674,6 +674,24 @@ class DashboardExportTests(unittest.TestCase):
                 with self.assertRaises(DashboardExportError):
                     read_stores(self.stores_path)
 
+    def test_store_radius_matches_spatial_catchment_bounds(self) -> None:
+        for radius in ("1", "10000"):
+            with self.subTest(radius=radius):
+                self.stores_path.write_text(
+                    STORES_CSV.replace("500\n", f"{radius}\n", 1), encoding="utf-8"
+                )
+                self.assertEqual(
+                    read_stores(self.stores_path)[0]["catchmentRadiusM"], float(radius)
+                )
+
+        for radius in ("0.5", "10000.1"):
+            with self.subTest(radius=radius):
+                self.stores_path.write_text(
+                    STORES_CSV.replace("500\n", f"{radius}\n", 1), encoding="utf-8"
+                )
+                with self.assertRaisesRegex(DashboardExportError, "catchment radius"):
+                    read_stores(self.stores_path)
+
     def test_connection_settings_use_mart_schema_and_support_key_auth(self) -> None:
         environment = {
             "DBT_SNOWFLAKE_ACCOUNT": "account",

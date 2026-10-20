@@ -44,6 +44,8 @@ schema differs, set the same `DBT_SNOWFLAKE_SCHEMA` value for dbt and the export
 The output follows the `dashboard/src/data/types.ts` contract: UTC refresh time,
 retail timezone, approved store coordinates, daily store-pair/daypart overlap metrics, and
 the ordered candidate-to-existing observation count, plus reported per-store/per-hour footfall.
+Store catchment radii must remain within the spatial join's inclusive 1–10,000 metre range;
+the exporter rejects an out-of-range reference rather than publishing an unsupported map radius.
 It also includes `h3Footfall`: citywide resolution-8 H3 cell-hour observations with hexadecimal
 `hexId`, `h3Resolution`, `trafficDateLocal`, `hourLocal`, `uniqueVisitors`, and `pingCount`. No
 device identifiers or raw coordinates enter this feed. The H3 counts come from raw pings before
