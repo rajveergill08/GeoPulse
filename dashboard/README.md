@@ -32,7 +32,9 @@ host can serve that file (or a copied object) at the URL configured by
 `VITE_GEOPULSE_DATA_URL`. Do not make Snowflake credentials or the raw ping tables available in
 the browser. The current exporter is synthetic-only; real mobility publication remains blocked
 until a reviewed privacy policy exists. See `docs/dashboard-export.md` for the publisher and
-recovery contract.
+recovery contract. The browser also refuses snapshots marked non-synthetic or carrying
+unexpected top-level or metadata fields. This checks the displayed feed contract; it cannot
+verify the source data or make a real mobility feed safe to publish.
 
 ## Dashboard response contract
 

@@ -116,6 +116,42 @@ describe('parseDashboardSnapshot', () => {
     expect(parseDashboardSnapshot(snapshot)).toEqual(snapshot);
   });
 
+  it('rejects non-synthetic snapshots instead of hiding the demo label', () => {
+    const snapshot = validSnapshot();
+    snapshot.metadata.synthetic = false;
+
+    expect(() => parseDashboardSnapshot(snapshot)).toThrow(
+      'Dashboard only accepts synthetic mobility snapshots.'
+    );
+  });
+
+  it('requires a synthetic flag and rejects unexpected response fields', () => {
+    const missingFlag = validSnapshot();
+    const metadata: Partial<typeof missingFlag.metadata> = missingFlag.metadata;
+    delete metadata.synthetic;
+    expect(() => parseDashboardSnapshot(missingFlag)).toThrow(
+      'Dashboard response contains invalid store metadata.'
+    );
+
+    const invalidFlag = validSnapshot();
+    expect(() => parseDashboardSnapshot({
+      ...invalidFlag,
+      metadata: {...invalidFlag.metadata, synthetic: 'true'}
+    })).toThrow('Dashboard response contains invalid store metadata.');
+
+    const extraMetadata = validSnapshot();
+    expect(() => parseDashboardSnapshot({
+      ...extraMetadata,
+      metadata: {...extraMetadata.metadata, deviceId: 'private-device'}
+    })).toThrow('Dashboard response contains invalid store metadata.');
+
+    const extraRoot = validSnapshot();
+    expect(() => parseDashboardSnapshot({
+      ...extraRoot,
+      devicePings: [{deviceId: 'private-device'}]
+    })).toThrow('Dashboard response contains unexpected fields.');
+  });
+
   it('rejects mathematically inconsistent incremental visitors', () => {
     const snapshot = validSnapshot();
     snapshot.flows[0].incrementalCandidateVisitors = 2;

@@ -3,6 +3,7 @@ import type {CannibalizationFlow, DashboardSnapshot, H3Footfall, HourlyFootfall,
 const DEFAULT_DATA_URL = '/data/geopulse-dashboard.json';
 const snapshotRequests = new Map<string, Promise<DashboardSnapshot>>();
 const RESOLUTION_8_H3_ID = /^88[0-9a-f]{13}$/;
+const SNAPSHOT_FIELDS = new Set(['metadata', 'stores', 'flows', 'hourlyFootfall', 'h3Footfall']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -159,8 +160,13 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
     throw new Error('Dashboard response is missing metadata.');
   }
 
+  if (Object.keys(value).some((field) => !SNAPSHOT_FIELDS.has(field))) {
+    throw new Error('Dashboard response contains unexpected fields.');
+  }
+
   const {metadata} = value;
   const metadataIsValid =
+    Object.keys(metadata).length === 5 &&
     typeof metadata.source === 'string' &&
     typeof metadata.refreshedAt === 'string' &&
     metadata.timezone === 'UTC' &&
@@ -168,7 +174,15 @@ export function parseDashboardSnapshot(value: unknown): DashboardSnapshot {
     metadata.retailTimezone.length > 0 &&
     typeof metadata.synthetic === 'boolean';
 
-  if (!metadataIsValid || !Array.isArray(value.stores) || !value.stores.every(isStore)) {
+  if (!metadataIsValid) {
+    throw new Error('Dashboard response contains invalid store metadata.');
+  }
+
+  if (metadata.synthetic !== true) {
+    throw new Error('Dashboard only accepts synthetic mobility snapshots.');
+  }
+
+  if (!Array.isArray(value.stores) || !value.stores.every(isStore)) {
     throw new Error('Dashboard response contains invalid store metadata.');
   }
 

@@ -33,7 +33,9 @@ The exporter rejects a run without it before connecting to Snowflake. This is a 
 project feature, not approval to publish real H3 cells, store-hour cohorts, or daypart overlaps.
 Real mobility publication needs a reviewed small-cell suppression, retention, and access policy
 first; do not mark real data as synthetic. The flag is an operator assertion, not independent
-proof of data provenance. The date is supplied as a bound query value, not interpolated into SQL.
+proof of data provenance. The dashboard additionally rejects snapshots without a true synthetic
+flag or with unexpected response fields; that browser check does not secure the fetched file or
+prove its provenance. The date is supplied as a bound query value, not interpolated into SQL.
 The exporter reads the `FCT_STORE_CANNIBALIZATION`, `FCT_STORE_HOURLY_FOOTFALL`, and
 `FCT_H3_HOURLY_FOOTFALL` marts in `GEOPULSE.ANALYTICS_MARTS` by default. The
 `ANALYTICS_MARTS` suffix comes from dbt's target
