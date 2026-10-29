@@ -1,0 +1,4 @@
+zone_id,zone_name,zoning_class,polygon_wkt,source_label
+synthetic_zone_mg_road,Synthetic MG Road commercial area,retail_commercial,"POLYGON ((77.603 12.970, 77.610 12.970, 77.610 12.979, 77.603 12.979, 77.603 12.970))",synthetic
+synthetic_zone_indiranagar,Synthetic Indiranagar commercial area,retail_commercial,"POLYGON ((77.636 12.973, 77.646 12.973, 77.646 12.984, 77.636 12.984, 77.636 12.973))",synthetic
+synthetic_zone_koramangala,Synthetic Koramangala commercial area,retail_commercial,"POLYGON ((77.620 12.930, 77.630 12.930, 77.630 12.941, 77.620 12.941, 77.620 12.930))",synthetic

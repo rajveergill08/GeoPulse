@@ -10,6 +10,10 @@ import {
 type KeplerMapConfig = NonNullable<Parameters<typeof addDataToMap>[0]['config']>;
 type ParsedKeplerMapConfig = Extract<KeplerMapConfig, {visState?: unknown}>;
 
+export function baseMapStyleForToken(token: string | undefined): 'dark' | 'no_map' {
+  return token?.trim() ? 'dark' : 'no_map';
+}
+
 export const KEPLER_MAP_CONFIG: ParsedKeplerMapConfig = {
   visState: {
     filters: [],
@@ -29,8 +33,8 @@ export const KEPLER_MAP_CONFIG: ParsedKeplerMapConfig = {
             enable3d: true,
             filled: true,
             outline: false,
-            elevationScale: 5,
-            sizeRange: [0, 500]
+            elevationScale: 1,
+            sizeRange: [10, 75]
           }
         },
         visualChannels: {
@@ -107,7 +111,7 @@ export const KEPLER_MAP_CONFIG: ParsedKeplerMapConfig = {
     isSplit: false
   },
   mapStyle: {
-    styleType: 'dark',
+    styleType: baseMapStyleForToken(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN),
     visibleLayerGroups: {
       label: true,
       road: true,

@@ -70,8 +70,8 @@ export function MobilityMapUnavailable({
         </p>
 
         <div className="map-token-notice" role="status">
-          Add <code>VITE_MAPBOX_ACCESS_TOKEN</code> locally to activate the interactive Kepler.gl
-          basemap. No token is stored in this repository.
+          The interactive map could not be displayed in this browser. This schematic shows the
+          selected store comparison; H3 cells are unavailable here.
         </div>
       </div>
     </section>

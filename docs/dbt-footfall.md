@@ -113,12 +113,17 @@ timezone.
 
 ## Snowflake execution
 
-1. Run `sql/snowflake/02_spatial_matches.sql` after uploading Sedona match Parquet files to the
-   internal stage.
+1. Provision the raw and spatial tables using `sql/snowflake/04_raw_batch_setup.sql` and
+   `sql/snowflake/03_spatial_batch_setup.sql`. Publish one validated synthetic day with
+   `geopulse-load-raw` and `geopulse-load-spatial` as described in
+   `docs/raw-warehouse-loading.md` and `docs/warehouse-loading.md`. The older
+   `02_spatial_matches.sql` is a manual full-refresh reference and must not be used for the
+   scheduled daily path.
 2. Export the environment variables referenced by `profiles/snowflake/profiles.yml`; credentials
    stay outside Git.
-3. Validate connectivity with `dbt debug --profiles-dir profiles/snowflake`.
-4. Run `dbt build --profiles-dir profiles/snowflake --target snowflake`.
+3. Validate connectivity with `dbt debug --profiles-dir profiles/snowflake --target snowflake`.
+4. Run `dbt build --profiles-dir profiles/snowflake --target snowflake --exclude-resource-type seed`
+   so synthetic CI seeds are not published to the Snowflake target.
 
 The default sources are `GEOPULSE.SPATIAL.PING_STORE_MATCHES` and
 `GEOPULSE.RAW.MOBILE_PINGS`. Override `DBT_SNOWFLAKE_SOURCE_SCHEMA` or

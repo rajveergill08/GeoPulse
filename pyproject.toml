@@ -42,6 +42,8 @@ geopulse-validate-spatial = "geopulse.quality:main"
 geopulse-load-spatial = "geopulse.warehouse:main"
 geopulse-load-raw = "geopulse.raw_warehouse:main"
 geopulse-export-dashboard = "geopulse.dashboard_export:main"
+geopulse-verify-spatial-scale = "geopulse.scale_verify:main"
+geopulse-zone-overlay = "geopulse.zoning:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -83,6 +83,28 @@ for every catchment intersected by a ping. Overlapping matches are retained for 
 cannibalization model. See `docs/spatial-join.md` for data-quality rules, output contracts, and
 scaling notes.
 
+An optional Sedona job also intersects synthetic pings with three explicitly fictional
+commercial-zone polygons. It writes a separate audited batch and does not change store metrics.
+See `docs/zoning-overlay.md` for the sample data, command, and real-data boundary.
+
+## Verify a synthetic spatial batch
+
+On Linux or WSL2 with Java 17 and `.[spatial]` installed, run the opt-in verifier to exercise
+the generator, Sedona join, and quality gate together. Choose a **new** output path; the command
+refuses to overwrite an existing run and writes stage logs plus `verification.json` there.
+
+```bash
+geopulse-verify-spatial-scale \
+  --run-date 2026-09-22 \
+  --stores data/reference/stores.csv \
+  --output data/output/verification/20260922-smoke \
+  --devices 100
+```
+
+This small smoke run generates 9,600 synthetic pings. It does not establish the proposed
+10-million-ping/5,000-polygon performance target or validate Snowflake, dbt, and Airflow execution.
+See `docs/project-completion.md` for the acceptance boundary and larger-run procedure.
+
 ## Build footfall and cannibalization metrics
 
 Install the analytics dependencies and run the complete dbt fixture build:
@@ -149,17 +171,19 @@ small-cell and access controls receive a separate privacy review.
 
 ```powershell
 Set-Location dashboard
-npm install
+npm.cmd ci
 Copy-Item .env.example .env.local
-npm run dev
+npm.cmd run dev
 ```
 
-Set `VITE_MAPBOX_ACCESS_TOKEN` in `.env.local` to enable the basemap. The KPI cards and scenario
-panel remain available without a token. Run `npm run lint`, `npm run test`, and `npm run build`
-before publishing a change. See `dashboard/README.md` for the response contract and production
-integration boundary. The scheduled exporter creates `data/output/dashboard/geopulse-dashboard.json`
-after dbt succeeds; a static host can serve that validated file without exposing Snowflake
-credentials. See `docs/dashboard-export.md` for the export and deployment contract.
+Without a token, Kepler.gl still displays interactive store and H3 layers on a blank background.
+Set `VITE_MAPBOX_ACCESS_TOKEN` in `.env.local` only if a street basemap is needed. On PowerShell,
+use `npm.cmd` to avoid the blocked `npm.ps1` wrapper. Run `npm.cmd run lint`,
+`npm.cmd run test`, and `npm.cmd run build` before publishing a change. See
+`dashboard/README.md` for the response contract and production integration boundary. The
+scheduled exporter creates `data/output/dashboard/geopulse-dashboard.json` after dbt succeeds;
+a static host can serve that validated file without exposing Snowflake credentials. See
+`docs/dashboard-export.md` for the export and deployment contract.
 
 ## Load into Snowflake
 

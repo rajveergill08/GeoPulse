@@ -5,8 +5,12 @@ import keplerGlReducer, {
 import {applyMiddleware, combineReducers, compose, createStore} from 'redux';
 import type {Reducer} from 'redux';
 
+import {baseMapStyleForToken} from '../data/keplerConfig';
+
 type KeplerGlStateMap = Record<string, Partial<KeplerGlState>>;
-const typedKeplerGlReducer = keplerGlReducer as Reducer<KeplerGlStateMap>;
+const typedKeplerGlReducer = keplerGlReducer.initialState({
+  mapStyle: {styleType: baseMapStyleForToken(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN)}
+}) as Reducer<KeplerGlStateMap>;
 
 const rootReducer = combineReducers({
   keplerGl: typedKeplerGlReducer

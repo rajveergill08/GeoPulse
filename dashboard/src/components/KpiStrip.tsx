@@ -48,7 +48,9 @@ export function KpiStrip({flow}: KpiStripProps) {
       <KpiCard
         label="Incremental reach"
         value={formatPercent(flow.candidateIncrementalReachRate)}
-        detail={`${formatInteger(flow.incrementalCandidateVisitors)} candidate-only visitor`}
+        detail={`${formatInteger(flow.incrementalCandidateVisitors)} candidate-only visitor${
+          flow.incrementalCandidateVisitors === 1 ? '' : 's'
+        }`}
       />
     </section>
   );

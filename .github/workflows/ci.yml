@@ -99,6 +99,25 @@ jobs:
       - name: Run Apache Sedona integration tests
         run: python -m unittest discover -s tests -p "test_spatial.py" -v
 
+      - name: Check synthetic zoning polygon overlay
+        run: python -m unittest discover -s tests -p "test_zoning.py" -v
+
+      - name: Verify a complete synthetic spatial batch
+        run: >-
+          geopulse-verify-spatial-scale
+          --run-date 2026-09-22
+          --stores data/reference/stores.csv
+          --output data/output/ci-spatial-verification
+          --devices 100
+          --shuffle-partitions 4
+
+      - name: Print spatial verification evidence
+        if: always()
+        run: |
+          if [ -f data/output/ci-spatial-verification/verification.json ]; then
+            cat data/output/ci-spatial-verification/verification.json
+          fi
+
   test-dbt:
     runs-on: ubuntu-latest
     steps:

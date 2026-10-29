@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
-import {KEPLER_MAP_CONFIG} from './keplerConfig';
+import {baseMapStyleForToken, KEPLER_MAP_CONFIG} from './keplerConfig';
 import {
   buildKeplerDatasets,
   FLOWS_DATASET_ID,
@@ -97,6 +97,15 @@ const snapshot: DashboardSnapshot = {
 };
 
 describe('buildKeplerDatasets', () => {
+  it('renders interactive layers without a basemap when no Mapbox token is set', () => {
+    expect(baseMapStyleForToken(undefined)).toBe('no_map');
+    expect(baseMapStyleForToken('  ')).toBe('no_map');
+    expect(baseMapStyleForToken('a-token')).toBe('dark');
+    expect(KEPLER_MAP_CONFIG.mapStyle?.styleType).toBe(
+      baseMapStyleForToken(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN)
+    );
+  });
+
   it('creates stores, an overlap link, catchment hours, and citywide H3 cells', () => {
     const datasets = buildKeplerDatasets(snapshot, flow);
 
@@ -250,7 +259,7 @@ describe('buildKeplerDatasets', () => {
         dataId: H3_FOOTFALL_DATASET_ID,
         columns: {hex_id: 'hex_id'},
         isVisible: true,
-        visConfig: {enable3d: true}
+        visConfig: {enable3d: true, elevationScale: 1, sizeRange: [10, 75]}
       },
       visualChannels: {
         sizeField: {name: 'unique_visitors', type: 'integer'},

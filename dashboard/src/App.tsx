@@ -3,7 +3,7 @@ import {lazy, Suspense, useEffect, useState} from 'react';
 import {DashboardHeader} from './components/DashboardHeader';
 import {FootfallTimeline} from './components/FootfallTimeline';
 import {KpiStrip} from './components/KpiStrip';
-import {MobilityMapUnavailable} from './components/MobilityMapUnavailable';
+import {MobilityMapErrorBoundary} from './components/MobilityMapErrorBoundary';
 import {ScenarioComparison} from './components/ScenarioComparison';
 import {ScenarioPanel} from './components/ScenarioPanel';
 import {loadDashboardSnapshot} from './data/dashboardData';
@@ -15,7 +15,6 @@ const MobilityMapBoundary = lazy(() =>
     default: module.MobilityMapBoundary
   }))
 );
-const hasMapboxToken = Boolean(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim());
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 const PLAYBACK_INTERVAL_MS = 1000;
 
@@ -194,7 +193,12 @@ export default function App() {
             selectedFlow={selectedFlow}
             onScenarioChange={selectScenario}
           />
-          {hasMapboxToken ? (
+          <MobilityMapErrorBoundary
+            snapshot={snapshot}
+            flow={selectedFlow}
+            selectedHour={selectedHour}
+            isPlaying={isPlaying}
+          >
             <Suspense fallback={<div className="map-loading">Loading geospatial renderer…</div>}>
               <MobilityMapBoundary
                 snapshot={snapshot}
@@ -202,14 +206,7 @@ export default function App() {
                 selectedHour={selectedHour}
               />
             </Suspense>
-          ) : (
-            <MobilityMapUnavailable
-              snapshot={snapshot}
-              flow={selectedFlow}
-              selectedHour={selectedHour}
-              isPlaying={isPlaying}
-            />
-          )}
+          </MobilityMapErrorBoundary>
         </div>
       </main>
       <footer className="dashboard-footer">

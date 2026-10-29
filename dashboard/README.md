@@ -13,17 +13,22 @@ not rank or recommend locations.
 Requirements: Node.js 20.19 or newer.
 
 ```powershell
-npm install
+npm.cmd ci
 Copy-Item .env.example .env.local
-npm run dev
+npm.cmd run dev
 ```
 
-Add a Mapbox access token to `.env.local` to display the basemap:
+The map works without a token: Kepler.gl draws interactive H3 columns, store markers, and
+the store-pair reference on a blank background. Add a Mapbox access token to `.env.local`
+if you want the dark street basemap behind those layers:
 
 ```dotenv
 VITE_MAPBOX_ACCESS_TOKEN=your_token
 VITE_GEOPULSE_DATA_URL=/data/geopulse-dashboard.json
 ```
+
+If the browser cannot initialize the map renderer, the dashboard shows a schematic store
+comparison in its place and clearly marks the H3 layer unavailable.
 
 The dashboard deliberately does not accept Snowflake credentials. GeoPulse's scheduled
 `geopulse-export-dashboard` command reads the aggregate dbt mart on the server side and writes
@@ -85,7 +90,7 @@ or hiding the browser tab pauses playback. Playback is unavailable when the devi
 reduced motion, but manual scrubbing remains available. The committed synthetic fixture reports
 only 08:00 observations for all three stores and an 18:00 observation for Store A; other hours
 remain "No reported data," not zero or interpolated traffic. The synthetic fixture includes
-citywide H3 observations at 08:00, 18:00, and 23:00. With a Mapbox token, Kepler.gl renders
+citywide H3 observations at 08:00, 18:00, and 23:00. Kepler.gl renders
 those real H3 cell identifiers as extruded 3D columns scaled by hourly distinct visitors.
 This is a citywide mobility-density layer, not catchment traffic, a measured route, or a
 prediction of store sales. It shows no cells for hours without reported H3 data.
@@ -93,8 +98,8 @@ prediction of store sales. It shows no cells for hours without reported H3 data.
 The committed sample at `public/data/geopulse-dashboard.json` is synthetic and mirrors the dbt
 cannibalization fixture: Store B has 3 of 10 overlapping existing visitors (30%), while
 Store C has 0 of 10 observed overlap and 4 of 4 candidate-only visitors in the same morning
-window. Zero observed overlap is not proof of no movement or sales impact. The no-token map
-preview is schematic and not to scale; it does not render H3 cells. The interactive map frames
+window. Zero observed overlap is not proof of no movement or sales impact. Without a Mapbox token,
+the interactive map has no street basemap or street labels, but still renders the H3 cells. It frames
 each selected store pair and overlays the same citywide H3 observations for either candidate.
 Its refresh timestamp is fixed evidence,
 not a claim that live data is connected. The scheduled exporter writes outside the source tree,
@@ -103,11 +108,11 @@ so deployment must copy or serve its output; it never silently replaces the comm
 ## Quality checks
 
 ```powershell
-npm run lint
-npm run test
-npm run typecheck
-npm run audit:critical
-npm run build
+npm.cmd run lint
+npm.cmd run test
+npm.cmd run typecheck
+npm.cmd run audit:critical
+npm.cmd run build
 ```
 
 Kepler.gl is pinned to the stable 3.2.6 release line, with MapLibre resolved to its audited current
